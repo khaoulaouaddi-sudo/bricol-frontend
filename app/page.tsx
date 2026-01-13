@@ -1,20 +1,13 @@
-// app/page.tsx
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import Image from "next/image";
-import { fetchUmbrellas } from "@/services/taxonomies";
-import { UmbrellaIcons } from "@/components/UmbrellaIcons";
 import { SearchBlock } from "@/components/SearchBlock";
-import UserQuickActions from "@/components/UserQuickActions";
 import SelectedProfilesSection from "@/components/home/SelectedProfilesSection";
+import UmbrellaIconsClient from "@/components/home/UmbrellaIconsClient";
 
-export default async function HomePage() {
-  const umbrellas = await fetchUmbrellas();
-
+export default function HomePage() {
   return (
     <main className="max-w-6xl mx-auto px-4 py-6 space-y-8">
-      {/* Petit header (actions rapides) si connecté */}
-      {/*< UserQuickActions >*/}
-
-      {/* HERO */}
       <section className="rounded-2xl overflow-hidden">
         <Image
           src="/hero-bricole.png"
@@ -27,16 +20,13 @@ export default async function HomePage() {
         />
       </section>
 
-      {/* Recherche */}
       <SearchBlock />
 
-      {/* Umbrella (juste sous la recherche) */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Par famille de métiers</h2>
-        <UmbrellaIcons umbrellas={umbrellas} />
+        <UmbrellaIconsClient />
       </section>
 
-      {/* Profils sélectionnés juste au-dessus du footer global */}
       <SelectedProfilesSection />
     </main>
   );
