@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import  api  from "@/lib/api";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import api from "@/lib/api";
 
 type User = { id: number; name: string | null; email: string; role: string };
 
@@ -20,15 +20,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function loadMe(): Promise<User | null> {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-
-    if (!token) {
+    if (typeof window === "undefined") {
+      // (ne devrait pas arriver en "use client", mais safe)
       setUser(null);
       setLoading(false);
       return null;
     }
 
+    const token = localStorage.getItem("accessToken");
+
+    // 1) Si pas de token, tenter refresh (cookie httpOnly)
+    if (!token) {
+      try {
+        const { data } = await api.post("/auth/refresh");
+        const newAccess = (data as any)?.access_token;
+        if (newAccess) {
+          localStorage.setItem("accessToken", newAccess);
+        } else {
+          setUser(null);
+          setLoading(false);
+          return null;
+        }
+      } catch {
+        setUser(null);
+        setLoading(false);
+        return null;
+      }
+      // pas de finally ici : on continue et on tente /users/me
+    }
+
+    // 2) Charger /users/me
     try {
       const { data } = await api.get<User>("/users/me");
       setUser(data);
@@ -59,17 +80,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function refreshUser() {
-    // met à jour le state depuis /users/me (si token)
     return await loadMe();
   }
 
   async function login(accessToken: string) {
     localStorage.setItem("accessToken", accessToken);
 
-    // IMPORTANT: on charge tout de suite /users/me pour éviter rôle “stale”
+    // Charger /users/me tout de suite
     await loadMe();
 
-    // et on notifie le reste de l'app (header, pages…)
+    // Notifier le reste de l'app
     window.dispatchEvent(new Event("auth-updated"));
   }
 

@@ -2,12 +2,31 @@
 
 import { useState } from "react";
 import type { Review } from "@/lib/api/reviews";
+import { useLang } from "@/components/LangProvider";
 import ReviewForm from "./ReviewForm";
 
-function fmtDate(iso: string) {
+const i18n = {
+  fr: {
+    userFallback: (id: number) => `User #${id}`,
+    noComment: "(Sans commentaire)",
+    cancel: "Annuler",
+    edit: "Modifier",
+    delete: "Supprimer",
+  },
+  ar: {
+    userFallback: (id: number) => `مستخدم #${id}`,
+    noComment: "(بدون تعليق)",
+    cancel: "إلغاء",
+    edit: "تعديل",
+    delete: "حذف",
+  },
+} as const;
+
+function fmtDate(iso: string, lang: "fr" | "ar") {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString();
+  // ✅ locale explicite pour éviter un rendu incohérent
+  return d.toLocaleDateString(lang === "ar" ? "ar-MA" : "fr-FR");
 }
 
 function Stars({ n }: { n: number }) {
@@ -29,6 +48,9 @@ export default function ReviewItem(props: {
   onUpdate: (reviewId: number, payload: { rating?: number; comment?: string | null }) => Promise<void> | void;
   onDelete: (reviewId: number) => Promise<void> | void;
 }) {
+  const { lang } = useLang();
+  const t = lang === "ar" ? i18n.ar : i18n.fr;
+
   const r = props.review;
   const [editing, setEditing] = useState(false);
 
@@ -37,13 +59,14 @@ export default function ReviewItem(props: {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="font-semibold">{r.reviewer_name ?? `User #${r.reviewer_id}`}</div>
+            <div className="font-semibold">{r.reviewer_name ?? t.userFallback(r.reviewer_id)}</div>
             <Stars n={Number(r.rating) || 0} />
-            <div className="text-xs text-gray-500">{fmtDate(r.created_at)}</div>
+            <div className="text-xs text-gray-500">{fmtDate(r.created_at, lang)}</div>
           </div>
+
           {!editing && (
             <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">
-              {r.comment?.trim() ? r.comment : <span className="text-gray-400">(Sans commentaire)</span>}
+              {r.comment?.trim() ? r.comment : <span className="text-gray-400">{t.noComment}</span>}
             </p>
           )}
         </div>
@@ -55,16 +78,17 @@ export default function ReviewItem(props: {
               type="button"
               onClick={() => setEditing((v) => !v)}
             >
-              {editing ? "Annuler" : "Modifier"}
+              {editing ? t.cancel : t.edit}
             </button>
           )}
+
           {props.canDelete && (
             <button
               className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
               type="button"
               onClick={() => props.onDelete(r.id)}
             >
-              Supprimer
+              {t.delete}
             </button>
           )}
         </div>

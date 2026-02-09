@@ -2,7 +2,8 @@
 import "./globals.css";
 import ClientProviders from "@/components/ClientProviders";
 import Header from "@/components/header";
-import Footer from "@/components/footer"; // ⚠️ si tu n'as pas encore de footer.tsx, commente cette ligne + <Footer />
+import Footer from "@/components/footer"; // si absent: commente import + <Footer />
+import { headers } from "next/headers";
 
 export const metadata = {
   title: "Bricol",
@@ -10,19 +11,19 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const h = headers();
+  const langHeader = h.get("x-bricol-lang");
+  const lang = langHeader === "ar" ? "ar" : "fr";
+  const dir = lang === "ar" ? "rtl" : "ltr";
+
   return (
-    <html lang="fr">
+    <html lang={lang} dir={dir} suppressHydrationWarning>
       <body className="bg-gray-50 text-gray-900">
         <ClientProviders>
-          {/* Header global avec logique de rôles */}
           <Header />
 
-          {/* Contenu des pages */}
-          <main className="min-h-screen">
-            {children}
-          </main>
+          <main className="min-h-screen">{children}</main>
 
-          {/* Footer global */}
           <Footer />
         </ClientProviders>
       </body>

@@ -1,9 +1,27 @@
 "use client";
 
 import type { Review } from "@/lib/api/reviews";
+import { useLang } from "@/components/LangProvider";
 import ReviewForm from "./ReviewForm";
 
 type User = { id: number; name: string | null; email: string; role: string } | null;
+
+const i18n = {
+  fr: {
+    title: "Votre avis",
+    loginHint: "Connectez-vous pour laisser un avis.",
+    already: "Vous avez déjà laissé un avis. Vous pouvez le modifier ou le supprimer.",
+    leave: "Laissez un avis.",
+    delete: "Supprimer",
+  },
+  ar: {
+    title: "تقييمك",
+    loginHint: "سجّل الدخول لترك تقييم.",
+    already: "لقد تركت تقييمًا بالفعل. يمكنك تعديله أو حذفه.",
+    leave: "اترك تقييمًا.",
+    delete: "حذف",
+  },
+} as const;
 
 export default function MyReviewPanel(props: {
   user: User;
@@ -12,15 +30,16 @@ export default function MyReviewPanel(props: {
   onUpdate: (reviewId: number, payload: { rating?: number; comment?: string | null }) => Promise<void> | void;
   onDelete: (reviewId: number) => Promise<void> | void;
 }) {
+  const { lang } = useLang();
+  const t = lang === "ar" ? i18n.ar : i18n.fr;
+
   const { user, myReview } = props;
 
   if (!user) {
     return (
       <div className="rounded-xl border p-4">
-        <div className="font-semibold">Votre avis</div>
-        <p className="mt-1 text-sm text-gray-600">
-          Connectez-vous pour laisser un avis.
-        </p>
+        <div className="font-semibold">{t.title}</div>
+        <p className="mt-1 text-sm text-gray-600">{t.loginHint}</p>
       </div>
     );
   }
@@ -29,18 +48,17 @@ export default function MyReviewPanel(props: {
     <div className="rounded-xl border p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-semibold">Votre avis</div>
-          <div className="text-sm text-gray-600">
-            {myReview ? "Vous avez déjà laissé un avis. Vous pouvez le modifier ou le supprimer." : "Laissez un avis."}
-          </div>
+          <div className="font-semibold">{t.title}</div>
+          <div className="text-sm text-gray-600">{myReview ? t.already : t.leave}</div>
         </div>
+
         {myReview && (
           <button
             className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
             onClick={() => props.onDelete(myReview.id)}
             type="button"
           >
-            Supprimer
+            {t.delete}
           </button>
         )}
       </div>

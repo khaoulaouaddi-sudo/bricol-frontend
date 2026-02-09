@@ -1,7 +1,13 @@
 "use client";
 
 import type { Review } from "@/lib/api/reviews";
+import { useLang } from "@/components/LangProvider";
 import ReviewItem from "./ReviewItem";
+
+const i18n = {
+  fr: { empty: "Aucun avis pour le moment." },
+  ar: { empty: "لا توجد تقييمات حالياً." },
+} as const;
 
 export default function ReviewsList(props: {
   reviews: Review[];
@@ -10,10 +16,13 @@ export default function ReviewsList(props: {
   onUpdate: (reviewId: number, payload: { rating?: number; comment?: string | null }) => Promise<void> | void;
   onDelete: (reviewId: number) => Promise<void> | void;
 }) {
+  const { lang } = useLang();
+  const t = lang === "ar" ? i18n.ar : i18n.fr;
+
   if (!props.reviews || props.reviews.length === 0) {
     return (
       <div className="rounded-xl border p-4 text-sm text-gray-600">
-        Aucun avis pour le moment.
+        {t.empty}
       </div>
     );
   }
