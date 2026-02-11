@@ -80,7 +80,6 @@ type RecentlyViewedItem = {
   viewedAt: number;
 };
 
-const LS_KEY = "bricol_recently_viewed_profiles_v1";
 const LS_LIMIT = 20;
 
 function sortCoverFirst(photos: CompanyPhoto[]) {
@@ -99,17 +98,18 @@ function pickCover(photos: CompanyPhoto[]) {
   return cover?.image_url ?? null;
 }
 
-function upsertRecentlyViewed(item: RecentlyViewedItem) {
+// ✅ ESSENTIEL: LS_KEY passé en paramètre
+function upsertRecentlyViewed(lsKey: string, item: RecentlyViewedItem) {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(lsKey);
     const prev: RecentlyViewedItem[] = raw ? JSON.parse(raw) : [];
 
     const next = [
       item,
-      ...prev.filter((x) => !(x.type === item.type && x.id === item.id)),
+      ...(Array.isArray(prev) ? prev.filter((x) => !(x.type === item.type && x.id === item.id)) : []),
     ].slice(0, LS_LIMIT);
 
-    localStorage.setItem(LS_KEY, JSON.stringify(next));
+    localStorage.setItem(lsKey, JSON.stringify(next));
   } catch {}
 }
 
@@ -134,13 +134,16 @@ function labelCity(city: CompanyProfile["city"], lang: "fr" | "ar") {
 
 export default function CompanyPublicPage() {
   const params = useParams();
-  const companyId = useMemo(() => Number(params?.id), [params]);
+  const companyId = useMemo(() => Number((params as any)?.id), [params]);
 
   const { lang } = useLang();
   const { user, loading: authLoading } = useAuth();
   const t = lang === "ar" ? i18n.ar : i18n.fr;
   const dir = lang === "ar" ? "rtl" : "ltr";
   const base = `/${lang}`;
+
+  // ✅ ESSENTIEL: LS_KEY calculé ici
+  const LS_KEY = `bricol_recently_viewed_profiles_${lang}_v1`;
 
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [photos, setPhotos] = useState<CompanyPhoto[]>([]);
@@ -155,8 +158,9 @@ export default function CompanyPublicPage() {
         setLoading(true);
         setError(null);
 
+        // ✅ ESSENTIEL: cohérence i18n (comme worker)
         const p: CompanyProfile = await api
-          .get(`/company-profiles/${companyId}`)
+          .get(`/company-profiles/${companyId}`, { params: { lang } })
           .then((r) => r.data);
 
         if (!alive) return;
@@ -167,14 +171,15 @@ export default function CompanyPublicPage() {
         const mergedPhotos = sortCoverFirst(mergedPhotosRaw);
         setPhotos(mergedPhotos);
 
-        const title =
-          (p?.name ?? p?.title ?? "").trim() || t.companyFallback(companyId);
+        const title = (p?.name ?? p?.title ?? "").trim() || t.companyFallback(companyId);
 
         const cityName = labelCity(p?.city ?? null, lang);
         const coverUrl = pickCover(mergedPhotos);
 
         const sectorLabels = labelSectors(p?.sectors ?? null);
-        upsertRecentlyViewed({
+
+        // ✅ ESSENTIEL: écrire dans la clé de la langue
+        upsertRecentlyViewed(LS_KEY, {
           type: "company",
           id: companyId,
           title,
@@ -196,7 +201,7 @@ export default function CompanyPublicPage() {
     return () => {
       alive = false;
     };
-  }, [companyId, lang, t]);
+  }, [companyId, lang, t, LS_KEY]);
 
   if (loading) {
     return (
@@ -209,9 +214,7 @@ export default function CompanyPublicPage() {
   if (error) {
     return (
       <main dir={dir} className="mx-auto max-w-5xl p-4">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-          {error}
-        </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
         <div className="mt-4">
           <Link className="underline" href={base}>
             {t.backHome}
@@ -221,9 +224,7 @@ export default function CompanyPublicPage() {
     );
   }
 
-  const title =
-    (profile?.name ?? profile?.title ?? "").trim() || t.companyFallback(companyId);
-
+  const title = (profile?.name ?? profile?.title ?? "").trim() || t.companyFallback(companyId);
   const cityName = labelCity(profile?.city ?? null, lang);
 
   return (
@@ -265,9 +266,7 @@ export default function CompanyPublicPage() {
         </div>
 
         {profile?.description && (
-          <p className="mt-3 whitespace-pre-wrap text-gray-800">
-            {profile.description}
-          </p>
+          <p className="mt-3 whitespace-pre-wrap text-gray-800">{profile.description}</p>
         )}
       </section>
 
@@ -287,9 +286,7 @@ export default function CompanyPublicPage() {
                   className="h-44 w-full object-cover"
                 />
                 <div className="p-2 flex items-center justify-between gap-2">
-                  <div className="text-xs text-gray-600 line-clamp-1">
-                    {p.caption || ""}
-                  </div>
+                  <div className="text-xs text-gray-600 line-clamp-1">{p.caption || ""}</div>
                   {p.is_cover ? (
                     <span className="text-[11px] rounded-full bg-black text-white px-2 py-0.5">
                       {t.cover}
@@ -302,7 +299,6 @@ export default function CompanyPublicPage() {
         )}
       </section>
 
-      {/* Owner mode: lecture seule (évite l'auto-review UX) */}
       <ReviewsSection
         targetType="company"
         targetProfileId={companyId}

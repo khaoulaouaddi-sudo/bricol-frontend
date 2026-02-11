@@ -57,16 +57,13 @@ type WorkerProfile = {
   id: number;
   user_id: number;
 
-  // worker_profile public fields
   title?: string | null;
   description?: string | null;
 
-  // user public fields coming from backend join
   user_name?: string | null;
   user_photo?: string | null;
   user_phone?: string | null;
 
-  // badges
   trust_badge?: boolean | null;
 
   city?: {
@@ -85,7 +82,6 @@ type WorkerProfile = {
     label?: string | null;
     label_ar?: string | null;
     display_label?: string | null;
-    // selon backend, il peut exister worker_label_ar/fr
     worker_label_ar?: string | null;
     worker_label_fr?: string | null;
   } | null;
@@ -104,14 +100,10 @@ type RecentlyViewedItem = {
   viewedAt: number;
 };
 
-const LS_KEY = "bricol_recently_viewed_profiles_v1";
 const LS_LIMIT = 20;
 
 function safeNumber(v: any) {
-  if (Array.isArray(v)) {
-    // cas rare: prendre le premier segment
-    v = v[0];
-  }
+  if (Array.isArray(v)) v = v[0];
   const n = Number(v);
   return Number.isFinite(n) ? n : NaN;
 }
@@ -128,16 +120,17 @@ function sortPhotosCoverFirst(photos: WorkerPhoto[]) {
   return list;
 }
 
-function pushRecentlyViewed(item: RecentlyViewedItem) {
+// ✅ ESSENTIEL: LS_KEY passé en paramètre (au lieu d'utiliser "lang" au niveau global)
+function pushRecentlyViewed(lsKey: string, item: RecentlyViewedItem) {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(lsKey);
     const prev: RecentlyViewedItem[] = raw ? JSON.parse(raw) : [];
     const next = [
       item,
       ...(Array.isArray(prev) ? prev.filter((x) => !(x.type === item.type && x.id === item.id)) : []),
     ].slice(0, LS_LIMIT);
 
-    localStorage.setItem(LS_KEY, JSON.stringify(next));
+    localStorage.setItem(lsKey, JSON.stringify(next));
   } catch {}
 }
 
@@ -168,12 +161,14 @@ export default function WorkerPublicPage() {
   const dir = lang === "ar" ? "rtl" : "ltr";
   const base = `/${lang}`;
 
+  // ✅ ESSENTIEL: LS_KEY calculé ici, après lang
+  const LS_KEY = `bricol_recently_viewed_profiles_${lang}_v1`;
+
   const [profile, setProfile] = useState<WorkerProfile | null>(null);
   const [photos, setPhotos] = useState<WorkerPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // téléphone : caché par défaut, affiché uniquement après clic
   const [showPhone, setShowPhone] = useState(false);
 
   useEffect(() => {
@@ -191,7 +186,6 @@ export default function WorkerPublicPage() {
         setErr(null);
         setShowPhone(false);
 
-        // IMPORTANT i18n: passer lang au backend
         const { data } = await api.get<WorkerProfile>(`/worker-profiles/${workerId}`, {
           params: { lang },
         });
@@ -204,7 +198,8 @@ export default function WorkerPublicPage() {
 
         const displayTitle = data.user_name || data.title || t.workerFallback;
 
-        pushRecentlyViewed({
+        // ✅ ESSENTIEL: on écrit dans la clé langue-correcte
+        pushRecentlyViewed(LS_KEY, {
           type: "worker",
           id: workerId,
           title: displayTitle,
@@ -226,7 +221,7 @@ export default function WorkerPublicPage() {
     return () => {
       cancelled = true;
     };
-  }, [workerId, lang, t.invalidId, t.loadErr, t.workerFallback]);
+  }, [workerId, lang, t.invalidId, t.loadErr, t.workerFallback, LS_KEY]);
 
   if (loading) {
     return (
@@ -265,7 +260,6 @@ export default function WorkerPublicPage() {
 
   return (
     <main dir={dir} className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      {/* 1) Carte utilisateur (photo perso + nom + téléphone caché par défaut) */}
       <section className="rounded-2xl border bg-white p-5">
         <div className="flex items-start gap-4 flex-wrap">
           <div className="w-20 h-20 rounded-full border overflow-hidden bg-gray-50 flex items-center justify-center">
@@ -289,7 +283,6 @@ export default function WorkerPublicPage() {
             {showTrust ? <div className="text-xs opacity-80 mt-1">{t.trust}</div> : null}
           </div>
 
-          {/* Téléphone (révélé au clic) */}
           <div className="flex items-center gap-2">
             {userPhone ? (
               <>
@@ -330,7 +323,6 @@ export default function WorkerPublicPage() {
         </div>
       </section>
 
-      {/* 2) Cover + infos principales (photo du profil, séparée de la photo user) */}
       <section className="rounded-2xl border bg-white overflow-hidden">
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -349,7 +341,6 @@ export default function WorkerPublicPage() {
         </div>
       </section>
 
-      {/* 3) Galerie photos du profil (travaux) + captions */}
       <section className="rounded-2xl border bg-white p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-lg font-semibold">{t.profilePhotos}</h2>
@@ -387,7 +378,6 @@ export default function WorkerPublicPage() {
         )}
       </section>
 
-      {/* 4) Reviews (ajout + empêcher self/double côté backend, + modifier/supprimer son propre review via MyReviewPanel) */}
       <ReviewsSection targetType="worker" targetProfileId={workerId} />
     </main>
   );

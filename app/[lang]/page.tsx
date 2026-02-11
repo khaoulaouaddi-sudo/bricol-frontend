@@ -16,7 +16,7 @@ export default function HomePage({
       <section className="rounded-2xl overflow-hidden">
         <Image
           src="/hero-bricole.png"
-          alt="bricole.ma"
+          alt="bricola.ma"
           width={1200}
           height={360}
           priority

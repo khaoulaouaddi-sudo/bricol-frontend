@@ -6,7 +6,7 @@ import Footer from "@/components/footer"; // si absent: commente import + <Foote
 import { headers } from "next/headers";
 
 export const metadata = {
-  title: "Bricol",
+  title: "Bricola",
   description: "Plateforme artisans",
 };
 

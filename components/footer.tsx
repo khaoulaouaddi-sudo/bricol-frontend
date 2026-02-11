@@ -57,7 +57,7 @@ export default function Footer() {
               <div className="flex items-center gap-3">
                 <Mail size={18} className="text-red-600" />
                 <span>
-                  {t.email} : contact@bricol.ma
+                  {t.email} : contact@bricola.ma
                 </span>
               </div>
             </div>
@@ -69,25 +69,25 @@ export default function Footer() {
               <div className="flex items-center gap-2">
                 <span className="text-blue-600 font-semibold">f</span>
                 <span>
-                  {t.facebook} : @Bricol.ma
+                  {t.facebook} : @bricola.ma
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-pink-600 font-semibold">📷</span>
                 <span>
-                  {t.instagram} : @bricol.ma
+                  {t.instagram} : @bricola.ma
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-red-600 font-semibold">▶</span>
                 <span>
-                  {t.youtube} : Bricol Channel
+                  {t.youtube} : Bricola Channel
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-black font-semibold">♪</span>
                 <span>
-                  {t.tiktok} : @bricol.ma
+                  {t.tiktok} : @bricola.ma
                 </span>
               </div>
             </div>
@@ -95,7 +95,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-gray-200 pt-8 text-center text-xs text-gray-500">
-          <p>&copy; 2025 Bricol. {t.rights}</p>
+          <p>&copy; 2025 Bricola. {t.rights}</p>
         </div>
       </div>
     </footer>

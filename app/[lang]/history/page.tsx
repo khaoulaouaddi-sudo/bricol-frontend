@@ -30,7 +30,6 @@ type MyReviewItem = {
   cover_url: string | null;
 };
 
-const LS_KEY = "bricol_recently_viewed_profiles_v1";
 // ✅ cohérent avec le code qui écrit l’historique (LS_LIMIT = 20)
 const LS_LIMIT = 20;
 
@@ -105,13 +104,12 @@ const i18n = {
   },
 } as const;
 
-function loadRecentlyViewed(): RecentlyViewedItem[] {
+function loadRecentlyViewed(lsKey: string): RecentlyViewedItem[] {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(lsKey);
     const arr = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(arr)) return [];
 
-    // ✅ sanitize + limit (cohérent avec writer)
     const cleaned: RecentlyViewedItem[] = arr
       .filter(
         (x: any) =>
@@ -124,16 +122,22 @@ function loadRecentlyViewed(): RecentlyViewedItem[] {
         return {
           type: x.type,
           id: Number(x.id),
-          title: typeof x.title === "string" && x.title.trim() ? x.title.trim() : `#${x.id}`,
-          sectorName: typeof x.sectorName === "string" ? x.sectorName : x.sectorName ?? null,
-          cityName: typeof x.cityName === "string" ? x.cityName : x.cityName ?? null,
-          coverUrl: typeof x.coverUrl === "string" ? x.coverUrl : x.coverUrl ?? null,
+          title:
+            typeof x.title === "string" && x.title.trim()
+              ? x.title.trim()
+              : `#${x.id}`,
+          sectorName:
+            typeof x.sectorName === "string" ? x.sectorName : x.sectorName ?? null,
+          cityName:
+            typeof x.cityName === "string" ? x.cityName : x.cityName ?? null,
+          coverUrl:
+            typeof x.coverUrl === "string" ? x.coverUrl : x.coverUrl ?? null,
           viewedAt: Number.isFinite(viewedAtNum) ? viewedAtNum : Date.now(),
         };
       })
       .slice(0, LS_LIMIT);
 
-    // ✅ l’app écrit déjà en ordre récent -> ancien, mais on trie pour robustesse
+    // Robustesse : tri descendant
     cleaned.sort((a, b) => (b.viewedAt || 0) - (a.viewedAt || 0));
     return cleaned;
   } catch {
@@ -142,7 +146,9 @@ function loadRecentlyViewed(): RecentlyViewedItem[] {
 }
 
 function hrefFor(base: string, item: { type: "worker" | "company"; id: number }) {
-  return item.type === "worker" ? `${base}/worker/${item.id}` : `${base}/company/${item.id}`;
+  return item.type === "worker"
+    ? `${base}/worker/${item.id}`
+    : `${base}/company/${item.id}`;
 }
 
 function fmtDate(d: string, locale: string) {
@@ -161,6 +167,9 @@ export default function HistoryPage() {
   const locale = lang === "ar" ? "ar-MA" : "fr-FR";
   const base = `/${lang}`;
 
+  // ✅ clé locale par langue (évite mélange FR/AR)
+  const LS_KEY = `bricol_recently_viewed_profiles_${lang}_v1`;
+
   const [recent, setRecent] = useState<RecentlyViewedItem[]>([]);
   const [filter, setFilter] = useState<"all" | "worker" | "company">("all");
 
@@ -175,8 +184,8 @@ export default function HistoryPage() {
   const [busyAction, setBusyAction] = useState<null | "save" | "delete">(null);
 
   useEffect(() => {
-    setRecent(loadRecentlyViewed());
-  }, []);
+    setRecent(loadRecentlyViewed(LS_KEY));
+  }, [LS_KEY]);
 
   const filteredRecent = useMemo(() => {
     if (filter === "all") return recent;
@@ -189,7 +198,6 @@ export default function HistoryPage() {
       setLoadingReviews(true);
       setErrReviews(null);
 
-      // ✅ ton patch backend supporte lang=ar|fr
       const { data } = await api.get<{ items: MyReviewItem[] }>("/reviews/mine", {
         params: { limit: 100, offset: 0, lang },
       });
@@ -318,7 +326,11 @@ export default function HistoryPage() {
                 <div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                   {it.coverUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={it.coverUrl} alt={it.title} className="w-full h-full object-cover" />
+                    <img
+                      src={it.coverUrl}
+                      alt={it.title}
+                      className="w-full h-full object-cover"
+                    />
                   ) : null}
                 </div>
 
@@ -459,9 +471,7 @@ export default function HistoryPage() {
                           placeholder={t.commentPh}
                           disabled={busyAction === "save"}
                         />
-                        <div className="text-[11px] text-gray-500">
-                          {editComment.length}/2000
-                        </div>
+                        <div className="text-[11px] text-gray-500">{editComment.length}/2000</div>
                       </div>
 
                       <div className="flex gap-2">
