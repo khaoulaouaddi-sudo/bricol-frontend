@@ -170,6 +170,7 @@ export default function WorkerPublicPage() {
   const [err, setErr] = useState<string | null>(null);
 
   const [showPhone, setShowPhone] = useState(false);
+ 
 
   useEffect(() => {
     let cancelled = false;
@@ -223,6 +224,9 @@ export default function WorkerPublicPage() {
     };
   }, [workerId, lang, t.invalidId, t.loadErr, t.workerFallback, LS_KEY]);
 
+  const sortedPhotos = useMemo(() => sortPhotosCoverFirst(photos), [photos]);
+  const cover = useMemo(() => pickCover(sortedPhotos), [sortedPhotos]);
+
   if (loading) {
     return (
       <main dir={dir} className="max-w-6xl mx-auto px-4 py-6">
@@ -244,14 +248,21 @@ export default function WorkerPublicPage() {
     );
   }
 
-  if (!profile) return null;
+  if (!profile) {
+  return (
+    <main dir={dir} className="max-w-6xl mx-auto px-4 py-6">
+      <div className="rounded-2xl border bg-white p-6">{t.loadErr}</div>
+      <Link className="text-blue-600 underline" href={base}>
+        {t.backHome}
+      </Link>
+    </main>
+  );
+}
 
   const displayName = profile.user_name || profile.title || t.workerFallback;
   const sectorName = labelSector(profile.sector ?? null, lang);
   const cityName = labelCity(profile.city ?? null, lang);
 
-  const sortedPhotos = useMemo(() => sortPhotosCoverFirst(photos), [photos]);
-  const cover = useMemo(() => pickCover(sortedPhotos), [sortedPhotos]);
 
   const showTrust = profile.trust_badge === true;
 

@@ -2,13 +2,20 @@
 const nextConfig = {
   images: {
     remotePatterns: [
+      // ✅ Cloudinary (صور Bricola)
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+        pathname: "/**",
+      },
+
       // Google thumbnails
       {
         protocol: "https",
         hostname: "encrypted-tbn0.gstatic.com",
         pathname: "/**",
       },
-      // Google user content (souvent utile)
+      // Google user content
       {
         protocol: "https",
         hostname: "lh3.googleusercontent.com",

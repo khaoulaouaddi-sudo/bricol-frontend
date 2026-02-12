@@ -34,6 +34,14 @@ type Item = {
     display_name?: string | null;
     display_label?: string | null;
   };
+   sectors?: Array<{
+    id: number;
+    slug?: string;
+    name?: string | null;
+    name_ar?: string | null;
+    display_name?: string | null;
+    display_label?: string | null;
+  }>;
   umbrella?: {
     slug: string;
     name?: string;
@@ -432,10 +440,38 @@ export default function ResultsClient() {
                           {it.title_or_name}
                         </div>
 
-                        <div className="text-sm opacity-80 line-clamp-1">
-                          {sectorLabel ? sectorLabel : <span className="opacity-60">{t.dash}</span>}
-                          {cityLabel ? ` • ${cityLabel}` : ""}
-                        </div>
+                       <div className="text-sm opacity-80">
+  {it.profile_type === "company" ? (
+    it.sectors && it.sectors.length > 0 ? (
+      <div className="flex flex-wrap gap-2">
+        {it.sectors.map((s, idx) => {
+          const lbl =
+            s.display_label ??
+            s.display_name ??
+            (lang === "ar" ? s.name_ar : s.name) ??
+            s.slug ??
+            "";
+          if (!lbl) return null;
+          return (
+            <span key={idx} className="rounded-full border px-2 py-0.5 text-[12px]">
+              {lbl}
+            </span>
+          );
+        })}
+      </div>
+    ) : (
+      <span className="opacity-60">{t.dash}</span>
+    )
+  ) : (
+    // Worker inchangé: 1 secteur (profil)
+    <>
+      {sectorLabel ? sectorLabel : <span className="opacity-60">{t.dash}</span>}
+    </>
+  )}
+
+  {cityLabel ? <span className="opacity-80">{` • ${cityLabel}`}</span> : null}
+</div>
+
 
                         <div className="flex items-center gap-2 text-sm">
                           {avg === null ? (

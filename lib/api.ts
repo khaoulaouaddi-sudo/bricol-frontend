@@ -82,7 +82,12 @@ api.interceptors.response.use(
       return Promise.reject(err);
     }
 
-    if (status === 401 && !original?._retry) {
+   const msg = (err.response?.data as any)?.msg;
+
+if (
+  (status === 401 || (status === 403 && msg === "Token invalide")) &&
+  !original?._retry
+) {
       original._retry = true;
 
       // Si un refresh est déjà en cours, on met en file d'attente

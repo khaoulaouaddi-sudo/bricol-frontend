@@ -17,6 +17,13 @@ const i18n = {
     cover: "Couverture",
     photoAlt: "Photo",
     companyFallback: (id: number) => `Entreprise #${id}`,
+
+    // ✅ AJOUT ESSENTIEL (contact + titres blocs)
+    contact: "Contact",
+    phone: "Téléphone",
+    email: "Email",
+    website: "Site web",
+    description: "Description",
   },
   ar: {
     loading: "جار التحميل…",
@@ -26,6 +33,13 @@ const i18n = {
     cover: "صورة الغلاف",
     photoAlt: "صورة",
     companyFallback: (id: number) => `شركة #${id}`,
+
+    // ✅ AJOUT ESSENTIEL (contact + titres blocs)
+    contact: "معلومات التواصل",
+    phone: "الهاتف",
+    email: "البريد الإلكتروني",
+    website: "الموقع",
+    description: "الوصف",
   },
 } as const;
 
@@ -50,10 +64,19 @@ type CompanyProfile = {
   user_id?: number | null;
   user_photo?: string | null;
   name?: string | null;
+
+  // on garde title/address pour ne pas casser si jamais ça arrive du backend,
+  // mais on ne les utilise plus dans l’affichage
   title?: string | null;
-  description?: string | null;
   address?: string | null;
+
+  description?: string | null;
   location?: string | null;
+
+  // ✅ AJOUT ESSENTIEL: champs contact (déjà en DB/backend)
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
 
   city_id?: number | null;
   city?: {
@@ -81,7 +104,11 @@ type RecentlyViewedItem = {
 };
 
 const LS_LIMIT = 20;
-
+function safeNumber(v: any) {
+  if (Array.isArray(v)) v = v[0];
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
+}
 function sortCoverFirst(photos: CompanyPhoto[]) {
   const list = Array.isArray(photos) ? [...photos] : [];
   list.sort((a, b) => {
@@ -132,9 +159,15 @@ function labelCity(city: CompanyProfile["city"], lang: "fr" | "ar") {
   );
 }
 
+function normalizeWebsite(url: string) {
+  const u = url.trim();
+  if (!u) return "";
+  return u.startsWith("http://") || u.startsWith("https://") ? u : `https://${u}`;
+}
+
 export default function CompanyPublicPage() {
   const params = useParams();
-  const companyId = useMemo(() => Number((params as any)?.id), [params]);
+  const companyId = useMemo(() => safeNumber((params as any)?.id), [params]);
 
   const { lang } = useLang();
   const { user, loading: authLoading } = useAuth();
@@ -152,6 +185,14 @@ export default function CompanyPublicPage() {
 
   useEffect(() => {
     let alive = true;
+    // ✅ évite /company-profiles/NaN et donne une erreur propre
+    if (!companyId || Number.isNaN(companyId)) {
+      setError(lang === "ar" ? "معرّف غير صالح" : "Identifiant invalide");
+      setLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
 
     (async () => {
       try {
@@ -171,7 +212,8 @@ export default function CompanyPublicPage() {
         const mergedPhotos = sortCoverFirst(mergedPhotosRaw);
         setPhotos(mergedPhotos);
 
-        const title = (p?.name ?? p?.title ?? "").trim() || t.companyFallback(companyId);
+        // ✅ ESSENTIEL: titre public = name (on ne dépend plus de title)
+        const title = (p?.name ?? "").trim() || t.companyFallback(companyId);
 
         const cityName = labelCity(p?.city ?? null, lang);
         const coverUrl = pickCover(mergedPhotos);
@@ -201,7 +243,7 @@ export default function CompanyPublicPage() {
     return () => {
       alive = false;
     };
-  }, [companyId, lang, t, LS_KEY]);
+  }, [companyId, lang, LS_KEY]);
 
   if (loading) {
     return (
@@ -224,20 +266,25 @@ export default function CompanyPublicPage() {
     );
   }
 
-  const title = (profile?.name ?? profile?.title ?? "").trim() || t.companyFallback(companyId);
+  // ✅ ESSENTIEL: titre public = name (on ne dépend plus de title)
+  const title = (profile?.name ?? "").trim() || t.companyFallback(companyId);
   const cityName = labelCity(profile?.city ?? null, lang);
+
+  // ✅ ESSENTIEL: cover en grand + autres photos dessous
+  const coverPhoto = photos.find((p) => p.is_cover) ?? photos[0] ?? null;
+  const otherPhotos = photos.filter((p) => !coverPhoto || p.id !== coverPhoto.id);
+
+  const hasContact =
+    Boolean(profile?.phone?.trim()) || Boolean(profile?.email?.trim()) || Boolean(profile?.website?.trim());
 
   return (
     <main dir={dir} className="mx-auto max-w-5xl p-4">
+      {/* Header: titre + secteurs + ville/location */}
       <section className="rounded-2xl border p-5">
         <div className="flex items-start gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {profile?.user_photo ? (
-            <img
-              src={profile.user_photo}
-              alt={title}
-              className="h-14 w-14 rounded-full object-cover border"
-            />
+            <img src={profile.user_photo} alt={title} className="h-14 w-14 rounded-full object-cover border" />
           ) : null}
           <div className="min-w-0">
             <h1 className="text-2xl font-bold break-words">{title}</h1>
@@ -261,44 +308,103 @@ export default function CompanyPublicPage() {
           })()}
 
           {cityName && <span>📍 {cityName}</span>}
-          {profile?.address && <span>• {profile.address}</span>}
           {profile?.location && <span>• {profile.location}</span>}
         </div>
-
-        {profile?.description && (
-          <p className="mt-3 whitespace-pre-wrap text-gray-800">{profile.description}</p>
-        )}
       </section>
 
+      {/* ✅ PHOTOS: cover grande + galerie dessous avec caption */}
       <section className="mt-6 rounded-2xl border p-5">
         <h2 className="text-lg font-semibold">{t.photos}</h2>
 
         {photos.length === 0 ? (
           <p className="mt-2 text-sm text-gray-600">{t.noPhotos}</p>
         ) : (
-          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
-            {photos.map((p) => (
-              <div key={p.id} className="overflow-hidden rounded-xl border">
+          <>
+            {/* Cover en grand */}
+            {coverPhoto ? (
+              <div className="mt-3 overflow-hidden rounded-2xl border">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={p.image_url}
-                  alt={p.caption ?? t.photoAlt}
-                  className="h-44 w-full object-cover"
+                  src={coverPhoto.image_url}
+                  alt={coverPhoto.caption ?? t.photoAlt}
+                  className="h-64 w-full object-cover md:h-80"
                 />
-                <div className="p-2 flex items-center justify-between gap-2">
-                  <div className="text-xs text-gray-600 line-clamp-1">{p.caption || ""}</div>
-                  {p.is_cover ? (
-                    <span className="text-[11px] rounded-full bg-black text-white px-2 py-0.5">
-                      {t.cover}
-                    </span>
-                  ) : null}
+                <div className="p-3 flex items-start justify-between gap-3">
+                  <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                    {coverPhoto.caption ? coverPhoto.caption : ""}
+                  </div>
+                  <span className="shrink-0 text-[11px] rounded-full bg-black text-white px-2 py-0.5">
+                    {t.cover}
+                  </span>
                 </div>
               </div>
-            ))}
-          </div>
+            ) : null}
+
+            {/* Autres photos juste dessous + description */}
+            {otherPhotos.length > 0 ? (
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+                {otherPhotos.map((p) => (
+                  <div key={p.id} className="overflow-hidden rounded-xl border">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.image_url} alt={p.caption ?? t.photoAlt} className="h-44 w-full object-cover" />
+                    <div className="p-2">
+                      <div className="text-xs text-gray-700 whitespace-pre-wrap">
+                        {p.caption ? p.caption : ""}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </>
         )}
       </section>
 
+      {/* ✅ Description déplacée sous les photos */}
+      {profile?.description ? (
+        <section className="mt-6 rounded-2xl border p-5">
+          <h2 className="text-lg font-semibold">{t.description}</h2>
+          <p className="mt-2 whitespace-pre-wrap text-gray-800">{profile.description}</p>
+        </section>
+      ) : null}
+
+      {/* ✅ Contact ajouté (sans toucher au backend) */}
+      {hasContact ? (
+        <section className="mt-6 rounded-2xl border p-5">
+          <h2 className="text-lg font-semibold">{t.contact}</h2>
+
+          <div className="mt-3 space-y-2 text-sm text-gray-800">
+            {profile?.phone?.trim() ? (
+              <div>
+                <span className="font-medium">{t.phone}: </span>
+                <a className="underline" href={`tel:${profile.phone}`}>
+                  {profile.phone}
+                </a>
+              </div>
+            ) : null}
+
+            {profile?.email?.trim() ? (
+              <div>
+                <span className="font-medium">{t.email}: </span>
+                <a className="underline" href={`mailto:${profile.email}`}>
+                  {profile.email}
+                </a>
+              </div>
+            ) : null}
+
+            {profile?.website?.trim() ? (
+              <div>
+                <span className="font-medium">{t.website}: </span>
+                <a className="underline" href={normalizeWebsite(profile.website)} target="_blank" rel="noreferrer">
+                  {profile.website}
+                </a>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Reviews inchangés */}
       <ReviewsSection
         targetType="company"
         targetProfileId={companyId}
