@@ -411,16 +411,12 @@ export default function LoginClient() {
   type="button"
   onClick={onFacebookClick}
   disabled={loading}
-  className="w-full flex items-center justify-center gap-2 rounded-lg py-2 transition disabled:opacity-60 bg-[#1877F2] text-white hover:bg-[#166FE5]"
+  className="w-full h-[40px] flex items-center justify-center gap-2 rounded-lg transition disabled:opacity-60 bg-[#1877F2] text-white hover:bg-[#166FE5]"
 >
-  <svg
-    aria-hidden="true"
-    viewBox="0 0 24 24"
-    className="h-5 w-5 fill-white"
-  >
+  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-white">
     <path d="M22 12a10 10 0 1 0-11.5 9.9v-7H8v-3h2.5V9.5A3.5 3.5 0 0 1 14.2 6h2.3v3h-2.3c-.5 0-.9.4-.9.9V12H16l-.5 3h-2.2v7A10 10 0 0 0 22 12Z" />
   </svg>
-  <span>{t.facebook}</span>
+  <span className="text-sm font-medium">{t.facebook}</span>
 </button>
 
 
