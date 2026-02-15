@@ -17,7 +17,7 @@ const i18n = {
     name: "Nom",
     email: "Email",
     password: "Mot de passe",
-    tip: "Conseil : 10+ caractères, majuscule, minuscule, chiffre, caractère spécial.",
+    tip: "Conseil : au moins 4 caractères.",
     creating: "Création…",
     create: "Créer mon compte",
     already: "Déjà un compte ?",
@@ -27,13 +27,14 @@ const i18n = {
     createAnother: "Créer un autre compte",
     successDefault: "Compte créé. Vérifie ton email pour activer la connexion.",
     errDefault: "Erreur à l’inscription",
+    errPwdMin: "Le mot de passe doit contenir au moins 4 caractères.",
   },
   ar: {
     title: "إنشاء حساب",
     name: "الاسم",
     email: "البريد الإلكتروني",
     password: "كلمة المرور",
-    tip: "نصيحة: 10+ أحرف، حرف كبير وصغير، رقم، ورمز خاص.",
+    tip: "نصيحة: على الأقل 4 أحرف.",
     creating: "جارٍ الإنشاء…",
     create: "إنشاء الحساب",
     already: "لديك حساب؟",
@@ -43,6 +44,7 @@ const i18n = {
     createAnother: "إنشاء حساب آخر",
     successDefault: "تم إنشاء الحساب. تحقّق من بريدك لتفعيل الحساب.",
     errDefault: "حدث خطأ أثناء التسجيل",
+    errPwdMin: "كلمة المرور يجب أن تكون 4 أحرف على الأقل.",
   },
 } as const;
 
@@ -67,6 +69,14 @@ export default function RegisterPage() {
     setErr(null);
     setIssues([]);
     setSuccess(null);
+
+    // ✅ Optionnel (mais clair) : feedback immédiat côté UI
+    if ((password || "").length < 4) {
+      setErr(t.errPwdMin);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -163,6 +173,7 @@ export default function RegisterPage() {
               <input
                 type="password"
                 required
+                minLength={4} // ✅ règle minimale
                 className="w-full border rounded-lg px-3 py-2"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

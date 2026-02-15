@@ -37,7 +37,7 @@ export default function MyReviewPanel(props: {
 
   if (!user) {
     return (
-      <div className="rounded-xl border p-4">
+      <div className="rounded-xl border bg-white p-3 sm:p-4">
         <div className="font-semibold">{t.title}</div>
         <p className="mt-1 text-sm text-gray-600">{t.loginHint}</p>
       </div>
@@ -45,8 +45,8 @@ export default function MyReviewPanel(props: {
   }
 
   return (
-    <div className="rounded-xl border p-4">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-xl border bg-white p-3 sm:p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="font-semibold">{t.title}</div>
           <div className="text-sm text-gray-600">{myReview ? t.already : t.leave}</div>
@@ -54,7 +54,7 @@ export default function MyReviewPanel(props: {
 
         {myReview && (
           <button
-            className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+            className="w-full rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 sm:w-auto"
             onClick={() => props.onDelete(myReview.id)}
             type="button"
           >

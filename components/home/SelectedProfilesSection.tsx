@@ -67,10 +67,69 @@ export default async function SelectedProfilesSection({
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{t.title}</h2>
-        <span className="text-xs text-gray-500">{t.hint}</span>
+        <span className="hidden sm:inline text-xs text-gray-500">{t.hint}</span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Mobile: carrousel horizontal (scroll) */}
+<div className="sm:hidden -mx-4 px-4 overflow-x-auto flex gap-3 snap-x snap-mandatory pb-2">
+  {items.slice(0, 12).map((p) => {
+    const name =
+      p.display_name ||
+      (p.profile_type === "company" ? t.company : t.worker);
+
+    const sectorName =
+      (p.sector?.display_name ?? null) ||
+      (p.sector?.name ?? "");
+
+    const rating = ratingLabel(lang, p.reviews_avg, p.reviews_count);
+
+    return (
+      <Link
+        key={`${p.profile_type}-${p.profile_id}-m`}
+        href={hrefFor(lang, p)}
+        className="snap-start shrink-0 w-[78%] max-w-[340px] rounded-2xl border bg-white overflow-hidden"
+      >
+        <div className="relative w-full aspect-[16/10] bg-gray-100">
+          {p.cover_url ? (
+            <Image
+              src={p.cover_url}
+              alt={name}
+              fill
+              className="object-cover"
+              sizes="80vw"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-500">
+              {t.noPhoto}
+            </div>
+          )}
+
+          <div className="absolute top-2 left-2">
+            <span className="text-[11px] px-2 py-1 rounded-full bg-white/90 border">
+              {p.profile_type === "worker" ? t.worker : t.company}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-3 space-y-1">
+          <div className="font-semibold leading-snug line-clamp-1">
+            {name}
+          </div>
+
+          <div className="text-sm text-gray-600 line-clamp-1">
+            {sectorName}
+          </div>
+
+          <div className="text-sm text-gray-800">
+            <span className="font-medium">⭐</span> {rating}
+          </div>
+        </div>
+      </Link>
+    );
+  })}
+</div>
+
+      <div className="hidden sm:grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {items.slice(0, 12).map((p) => {
           const name =
             p.display_name ||

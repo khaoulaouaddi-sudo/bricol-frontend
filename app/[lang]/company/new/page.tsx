@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import RequireAuth from "@/components/RequireAuth";
 import { api } from "@/lib/api";
@@ -42,7 +42,7 @@ const i18n = {
 
     photosTitle: "Photos entreprise",
     photosSubtitle:
-      "Upload Cloudinary uniquement. Choisissez une photo de couverture : elle s’affiche sur la carte (accueil, recherche, etc.).",
+      "Upload Cloudinary uniquement. Ajoutez jusqu’à 10 photos et une description pour chacune.",
     addPhotos: "Ajouter des photos",
     addMore: "Ajouter encore",
     uploading: "Upload…",
@@ -50,12 +50,14 @@ const i18n = {
     maxReached: `Limite atteinte : ${MAX_COMPANY_PHOTOS} photos maximum.`,
     captionLabel: "Description (optionnel)",
     captionPh: "Ex: Chantier réalisé à Casablanca…",
-    cover: "Couverture",
     remove: "Retirer",
-    mustHaveCover: "Choisissez une photo de couverture.",
     uploadFail: "Échec upload photo.",
     createErr: "Erreur lors de la création entreprise.",
     ok: "OK",
+
+    // UI photos mobile
+    prev: "Précédent",
+    next: "Suivant",
   },
   ar: {
     loading: "جار التحميل…",
@@ -87,7 +89,7 @@ const i18n = {
 
     photosTitle: "صور الشركة",
     photosSubtitle:
-      "رفع Cloudinary فقط. اختر صورة الغلاف: تظهر في بطاقة الملف (الرئيسية، البحث…).",
+      "رفع Cloudinary فقط. أضف حتى 10 صور مع وصف لكل صورة.",
     addPhotos: "إضافة صور",
     addMore: "إضافة المزيد",
     uploading: "جار الرفع…",
@@ -95,12 +97,14 @@ const i18n = {
     maxReached: `تم بلوغ الحد الأقصى: ${MAX_COMPANY_PHOTOS} صورة.`,
     captionLabel: "وصف الصورة (اختياري)",
     captionPh: "مثال: أشغال في الدار البيضاء…",
-    cover: "غلاف",
     remove: "حذف",
-    mustHaveCover: "يرجى اختيار صورة الغلاف.",
     uploadFail: "فشل رفع الصورة.",
     createErr: "حدث خطأ أثناء إنشاء الشركة.",
     ok: "حسنًا",
+
+    // UI photos mobile
+    prev: "السابق",
+    next: "التالي",
   },
 } as const;
 
@@ -139,6 +143,7 @@ type NewPhoto = {
   id: string;
   url: string;
   caption: string;
+  // ✅ conservé uniquement pour compat (Option A), jamais affiché dans l’UI
   is_cover: boolean;
 };
 
@@ -154,7 +159,12 @@ function labelCity(c: City, lang: "fr" | "ar") {
 }
 
 function umbrellaLabel(u: Umbrella, lang: "fr" | "ar") {
-  return u.display_name ?? (lang === "ar" ? u.name_ar : u.name) ?? u.name ?? `#${u.id}`;
+  return (
+    u.display_name ??
+    (lang === "ar" ? u.name_ar : u.name) ??
+    u.name ??
+    `#${u.id}`
+  );
 }
 
 function sectorLabel(s: Umbrella["sectors"][number], lang: "fr" | "ar") {
@@ -194,7 +204,9 @@ function SectorDropdown(props: {
 
     return umbrellas
       .map((u) => {
-        const secs = u.sectors.filter((s) => sectorLabel(s, lang).toLowerCase().includes(query));
+        const secs = u.sectors.filter((s) =>
+          sectorLabel(s, lang).toLowerCase().includes(query)
+        );
         return { ...u, sectors: secs };
       })
       .filter((u) => u.sectors.length > 0);
@@ -255,7 +267,11 @@ function SectorDropdown(props: {
                           key={s.id}
                           className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 cursor-pointer"
                         >
-                          <input type="checkbox" checked={checked} onChange={() => toggle(s.id)} />
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggle(s.id)}
+                          />
                           <span className="text-sm">{sectorLabel(s, lang)}</span>
                         </label>
                       );
@@ -321,6 +337,10 @@ function CompanyNewInner() {
   // photos (Cloudinary)
   const [photos, setPhotos] = useState<NewPhoto[]>([]);
   const [uploading, setUploading] = useState(false);
+
+  // ✅ mobile carousel state (UI-only)
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
 
   const selectedCity = useMemo(() => {
     if (!cityId) return null;
@@ -392,6 +412,7 @@ function CompanyNewInner() {
   }, [router, t.pageLoadFail, base]);
 
   // --- Photos helpers (stable, minimal) ---
+  // Option A interne : si aucune cover, la 1ère photo devient cover (jamais affiché dans l’UI)
   function ensureCover(next: NewPhoto[]) {
     if (next.length === 0) return next;
     if (next.some((p) => p.is_cover)) return next;
@@ -407,7 +428,6 @@ function CompanyNewInner() {
       return;
     }
 
-    // ✅ important: gérer uploading autour du vrai onchange async
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -435,7 +455,12 @@ function CompanyNewInner() {
           });
         }
 
-        setPhotos((prev) => ensureCover([...prev, ...uploaded]));
+        setPhotos((prev) => {
+          const next = ensureCover([...prev, ...uploaded]);
+          // UI-only: reset index if needed
+          setActiveIndex(0);
+          return next;
+        });
       } catch (e) {
         console.error(e);
         setErr(t.uploadFail);
@@ -447,16 +472,51 @@ function CompanyNewInner() {
     input.click();
   }
 
-  function setCover(id: string) {
-    setPhotos((prev) => prev.map((p) => ({ ...p, is_cover: p.id === id })));
-  }
-
   function updateCaption(id: string, caption: string) {
     setPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, caption } : p)));
   }
 
   function removePhoto(id: string) {
-    setPhotos((prev) => ensureCover(prev.filter((p) => p.id !== id)));
+    setPhotos((prev) => {
+      const next = ensureCover(prev.filter((p) => p.id !== id));
+      // UI-only: clamp activeIndex
+      const nextIndex = Math.min(activeIndex, Math.max(0, next.length - 1));
+      setActiveIndex(nextIndex);
+      requestAnimationFrame(() => {
+        if (scrollerRef.current) {
+          scrollerRef.current.scrollTo({ left: 0, behavior: "smooth" });
+        }
+      });
+      return next;
+    });
+  }
+
+  function onScrollCarousel() {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const w = el.clientWidth || 1;
+    const idx = Math.round(el.scrollLeft / w);
+    if (idx !== activeIndex) setActiveIndex(idx);
+  }
+
+  function scrollToIndex(idx: number) {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const w = el.clientWidth || 1;
+    el.scrollTo({ left: idx * w, behavior: "smooth" });
+    setActiveIndex(idx);
+  }
+
+  function prevPhoto() {
+    if (photos.length === 0) return;
+    const next = (activeIndex - 1 + photos.length) % photos.length;
+    scrollToIndex(next);
+  }
+
+  function nextPhoto() {
+    if (photos.length === 0) return;
+    const next = (activeIndex + 1) % photos.length;
+    scrollToIndex(next);
   }
 
   async function handleCreate() {
@@ -468,13 +528,6 @@ function CompanyNewInner() {
     try {
       if (sectorIds.length === 0) {
         setErr(t.sectorsRequired);
-        return;
-      }
-
-      // Ici, ensureCover garantit déjà une cover si photos > 0,
-      // mais on garde ce check pour sécurité (si un futur changement casse ensureCover).
-      if (photos.length > 0 && !photos.some((p) => p.is_cover)) {
-        setErr(t.mustHaveCover);
         return;
       }
 
@@ -491,9 +544,10 @@ function CompanyNewInner() {
 
       const companyId = res?.data?.id;
 
-      // 2) Insert photos (image_url + caption + is_cover)
+      // 2) Insert photos (image_url + caption + is_cover) — Option A interne, pas d’UI cover
       if (companyId && photos.length > 0) {
-        for (const p of photos) {
+        const withCover = ensureCover([...photos]);
+        for (const p of withCover) {
           await api.post("/company-photos", {
             company_id: companyId,
             image_url: p.url,
@@ -660,48 +714,113 @@ function CompanyNewInner() {
           )}
         </div>
 
-        {photos.length > 0 && (
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {photos.map((p) => (
-              <div key={p.id} className="rounded-2xl border overflow-hidden bg-white">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt="" className="w-full h-40 object-cover" />
+        {photos.length > 0 ? (
+          <>
+            {/* ✅ Mobile premium carousel (sm:hidden) */}
+            <div className="sm:hidden">
+              <div className="relative overflow-hidden rounded-2xl border bg-white">
+                <button
+                  type="button"
+                  onClick={prevPhoto}
+                  className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full border bg-white/90 px-3 py-2 text-sm shadow-sm hover:bg-white"
+                >
+                  {dir === "rtl" ? "›" : "‹"}
+                </button>
 
-                <div className="p-3 space-y-2">
-                  <div className="space-y-1">
-                    <div className="text-xs opacity-70">{t.captionLabel}</div>
-                    <input
-                      value={p.caption}
-                      onChange={(e) => updateCaption(p.id, e.target.value)}
-                      className="w-full rounded-xl border px-3 py-2 text-sm"
-                      placeholder={t.captionPh}
-                    />
-                  </div>
+                <button
+                  type="button"
+                  onClick={nextPhoto}
+                  className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full border bg-white/90 px-3 py-2 text-sm shadow-sm hover:bg-white"
+                >
+                  {dir === "rtl" ? "‹" : "›"}
+                </button>
 
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        name="company-cover"
-                        checked={p.is_cover}
-                        onChange={() => setCover(p.id)}
-                      />
-                      {t.cover}
-                    </label>
+                <div
+                  ref={scrollerRef}
+                  onScroll={onScrollCarousel}
+                  className="flex w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
+                  style={{ scrollbarWidth: "none" as any }}
+                >
+                  {photos.map((p) => (
+                    <div key={p.id} className="w-full flex-shrink-0 snap-start">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.url} alt="" className="w-full h-56 object-cover" />
+                      <div className="p-3 space-y-2">
+                        <div className="space-y-1">
+                          <div className="text-xs opacity-70">{t.captionLabel}</div>
+                          <input
+                            value={p.caption}
+                            onChange={(e) => updateCaption(p.id, e.target.value)}
+                            className="w-full rounded-xl border px-3 py-2 text-sm"
+                            placeholder={t.captionPh}
+                          />
+                        </div>
 
-                    <button
-                      type="button"
-                      className="text-sm px-3 py-1 rounded-lg border bg-white hover:bg-gray-50"
-                      onClick={() => removePhoto(p.id)}
-                    >
-                      {t.remove}
-                    </button>
-                  </div>
+                        <div className="flex items-center justify-end">
+                          <button
+                            type="button"
+                            className="text-sm px-3 py-2 rounded-xl border bg-white hover:bg-gray-50"
+                            onClick={() => removePhoto(p.id)}
+                          >
+                            {t.remove}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+
+              {/* dots */}
+              <div className="mt-3 flex items-center justify-center gap-2">
+                {photos.map((p, idx) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={[
+                      "h-2.5 w-2.5 rounded-full border",
+                      idx === activeIndex ? "bg-gray-900 border-gray-900" : "bg-white border-gray-300",
+                    ].join(" ")}
+                    onClick={() => scrollToIndex(idx)}
+                    aria-label={`Go to photo ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* ✅ Desktop/tablette: grille inchangée */}
+            <div className="hidden sm:grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {photos.map((p) => (
+                <div key={p.id} className="rounded-2xl border overflow-hidden bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.url} alt="" className="w-full h-40 object-cover" />
+
+                  <div className="p-3 space-y-2">
+                    <div className="space-y-1">
+                      <div className="text-xs opacity-70">{t.captionLabel}</div>
+                      <input
+                        value={p.caption}
+                        onChange={(e) => updateCaption(p.id, e.target.value)}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        placeholder={t.captionPh}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end">
+                      <button
+                        type="button"
+                        className="text-sm px-3 py-1 rounded-lg border bg-white hover:bg-gray-50"
+                        onClick={() => removePhoto(p.id)}
+                      >
+                        {t.remove}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
       </section>
 
       <div className="flex items-center justify-end gap-2">

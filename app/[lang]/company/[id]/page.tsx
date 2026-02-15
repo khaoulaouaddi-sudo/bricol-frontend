@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -14,32 +14,50 @@ const i18n = {
     backHome: "Retour accueil",
     photos: "Photos",
     noPhotos: "Aucune photo.",
-    cover: "Couverture",
     photoAlt: "Photo",
     companyFallback: (id: number) => `Entreprise #${id}`,
 
-    // ✅ AJOUT ESSENTIEL (contact + titres blocs)
     contact: "Contact",
     phone: "Téléphone",
     email: "Email",
     website: "Site web",
     description: "Description",
+
+    // UI mobile
+    showMore: "Voir plus",
+    showLess: "Voir moins",
+    readMore: "Lire plus",
+    readLess: "Réduire",
+    openPhoto: "Ouvrir la photo",
+    close: "Fermer",
+    call: "Appeler",
+    sendEmail: "Envoyer un email",
+    visitSite: "Visiter le site",
   },
   ar: {
     loading: "جار التحميل…",
     backHome: "العودة للرئيسية",
     photos: "الصور",
     noPhotos: "لا توجد صور.",
-    cover: "صورة الغلاف",
     photoAlt: "صورة",
     companyFallback: (id: number) => `شركة #${id}`,
 
-    // ✅ AJOUT ESSENTIEL (contact + titres blocs)
     contact: "معلومات التواصل",
     phone: "الهاتف",
     email: "البريد الإلكتروني",
     website: "الموقع",
     description: "الوصف",
+
+    // UI mobile
+    showMore: "عرض المزيد",
+    showLess: "عرض أقل",
+    readMore: "قراءة المزيد",
+    readLess: "إخفاء",
+    openPhoto: "فتح الصورة",
+    close: "إغلاق",
+    call: "اتصال",
+    sendEmail: "إرسال بريد",
+    visitSite: "زيارة الموقع",
   },
 } as const;
 
@@ -47,7 +65,7 @@ type CompanyPhoto = {
   id: number;
   image_url: string;
   caption: string | null;
-  is_cover: boolean;
+  is_cover: boolean; // compat backend/data existante (non utilisé en UI)
 };
 
 type Sector = {
@@ -65,15 +83,12 @@ type CompanyProfile = {
   user_photo?: string | null;
   name?: string | null;
 
-  // on garde title/address pour ne pas casser si jamais ça arrive du backend,
-  // mais on ne les utilise plus dans l’affichage
   title?: string | null;
   address?: string | null;
 
   description?: string | null;
   location?: string | null;
 
-  // ✅ AJOUT ESSENTIEL: champs contact (déjà en DB/backend)
   phone?: string | null;
   email?: string | null;
   website?: string | null;
@@ -104,28 +119,20 @@ type RecentlyViewedItem = {
 };
 
 const LS_LIMIT = 20;
+
 function safeNumber(v: any) {
   if (Array.isArray(v)) v = v[0];
   const n = Number(v);
   return Number.isFinite(n) ? n : NaN;
 }
-function sortCoverFirst(photos: CompanyPhoto[]) {
-  const list = Array.isArray(photos) ? [...photos] : [];
-  list.sort((a, b) => {
-    const ac = a.is_cover ? 1 : 0;
-    const bc = b.is_cover ? 1 : 0;
-    return bc - ac;
-  });
-  return list;
-}
 
+// ✅ Conservé pour "recently viewed" seulement (invisible ici)
 function pickCover(photos: CompanyPhoto[]) {
   if (!photos?.length) return null;
   const cover = photos.find((p) => p.is_cover) ?? photos[0];
   return cover?.image_url ?? null;
 }
 
-// ✅ ESSENTIEL: LS_KEY passé en paramètre
 function upsertRecentlyViewed(lsKey: string, item: RecentlyViewedItem) {
   try {
     const raw = localStorage.getItem(lsKey);
@@ -175,7 +182,6 @@ export default function CompanyPublicPage() {
   const dir = lang === "ar" ? "rtl" : "ltr";
   const base = `/${lang}`;
 
-  // ✅ ESSENTIEL: LS_KEY calculé ici
   const LS_KEY = `bricol_recently_viewed_profiles_${lang}_v1`;
 
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
@@ -183,9 +189,18 @@ export default function CompanyPublicPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // UI-only states
+  const [showAllSectors, setShowAllSectors] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
+  const [expandedCaptionId, setExpandedCaptionId] = useState<number | null>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; caption?: string | null } | null>(null);
+
+  // ✅ Carousel state (UI only)
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
   useEffect(() => {
     let alive = true;
-    // ✅ évite /company-profiles/NaN et donne une erreur propre
     if (!companyId || Number.isNaN(companyId)) {
       setError(lang === "ar" ? "معرّف غير صالح" : "Identifiant invalide");
       setLoading(false);
@@ -199,7 +214,6 @@ export default function CompanyPublicPage() {
         setLoading(true);
         setError(null);
 
-        // ✅ ESSENTIEL: cohérence i18n (comme worker)
         const p: CompanyProfile = await api
           .get(`/company-profiles/${companyId}`, { params: { lang } })
           .then((r) => r.data);
@@ -208,19 +222,17 @@ export default function CompanyPublicPage() {
 
         setProfile(p);
 
+        // ✅ IMPORTANT: on n'utilise plus "cover first" pour l'UI
         const mergedPhotosRaw = Array.isArray(p?.photos) ? (p.photos as CompanyPhoto[]) : [];
-        const mergedPhotos = sortCoverFirst(mergedPhotosRaw);
-        setPhotos(mergedPhotos);
+        setPhotos(mergedPhotosRaw);
+        setActiveIndex(0);
 
-        // ✅ ESSENTIEL: titre public = name (on ne dépend plus de title)
+        // recently viewed (on garde coverUrl en interne pour ne rien casser ailleurs)
         const title = (p?.name ?? "").trim() || t.companyFallback(companyId);
-
         const cityName = labelCity(p?.city ?? null, lang);
-        const coverUrl = pickCover(mergedPhotos);
-
+        const coverUrl = pickCover(mergedPhotosRaw);
         const sectorLabels = labelSectors(p?.sectors ?? null);
 
-        // ✅ ESSENTIEL: écrire dans la clé de la langue
         upsertRecentlyViewed(LS_KEY, {
           type: "company",
           id: companyId,
@@ -245,18 +257,59 @@ export default function CompanyPublicPage() {
     };
   }, [companyId, lang, LS_KEY]);
 
+  useEffect(() => {
+    setShowAllSectors(false);
+    setDescExpanded(false);
+    setExpandedCaptionId(null);
+    setLightbox(null);
+    setActiveIndex(0);
+  }, [lang, companyId]);
+
+  // ✅ keep activeIndex synced with scroll (UI only)
+  function onScrollCarousel() {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const w = el.clientWidth || 1;
+    const nextIdx = Math.round(el.scrollLeft / w);
+    if (nextIdx !== activeIndex) setActiveIndex(nextIdx);
+  }
+
+  function scrollToIndex(idx: number) {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const w = el.clientWidth || 1;
+    el.scrollTo({ left: idx * w, behavior: "smooth" });
+    setActiveIndex(idx);
+  }
+
+  function prevPhoto() {
+    if (photos.length === 0) return;
+    const next = (activeIndex - 1 + photos.length) % photos.length;
+    scrollToIndex(next);
+  }
+
+  function nextPhoto() {
+    if (photos.length === 0) return;
+    const next = (activeIndex + 1) % photos.length;
+    scrollToIndex(next);
+  }
+
   if (loading) {
     return (
-      <main dir={dir} className="mx-auto max-w-5xl p-4">
-        <div className="rounded-xl border p-4">{t.loading}</div>
+      <main dir={dir} className="mx-auto max-w-5xl p-3 sm:p-4">
+        <div className="rounded-2xl border p-4 sm:p-5">
+          <div className="text-sm text-muted-foreground">{t.loading}</div>
+          <div className="mt-3 h-2 w-2/3 animate-pulse rounded bg-muted" />
+          <div className="mt-2 h-2 w-1/2 animate-pulse rounded bg-muted" />
+        </div>
       </main>
     );
   }
 
   if (error) {
     return (
-      <main dir={dir} className="mx-auto max-w-5xl p-4">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+      <main dir={dir} className="mx-auto max-w-5xl p-3 sm:p-4">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
         <div className="mt-4">
           <Link className="underline" href={base}>
             {t.backHome}
@@ -266,116 +319,291 @@ export default function CompanyPublicPage() {
     );
   }
 
-  // ✅ ESSENTIEL: titre public = name (on ne dépend plus de title)
   const title = (profile?.name ?? "").trim() || t.companyFallback(companyId);
   const cityName = labelCity(profile?.city ?? null, lang);
-
-  // ✅ ESSENTIEL: cover en grand + autres photos dessous
-  const coverPhoto = photos.find((p) => p.is_cover) ?? photos[0] ?? null;
-  const otherPhotos = photos.filter((p) => !coverPhoto || p.id !== coverPhoto.id);
 
   const hasContact =
     Boolean(profile?.phone?.trim()) || Boolean(profile?.email?.trim()) || Boolean(profile?.website?.trim());
 
+  const sectorLabels = labelSectors(profile?.sectors ?? null) ?? [];
+  const sectorMobileLimit = 3;
+  const sectorsToShow =
+    showAllSectors || sectorLabels.length <= sectorMobileLimit ? sectorLabels : sectorLabels.slice(0, sectorMobileLimit);
+  const remainingSectors = Math.max(0, sectorLabels.length - sectorsToShow.length);
+
+  const descriptionText = (profile?.description ?? "").trim();
+  const shouldClampDesc = descriptionText.length > 300;
+
+  const currentPhoto = photos[activeIndex] ?? null;
+  const currentHasCaption = Boolean(currentPhoto?.caption?.trim());
+  const captionExpanded = currentPhoto ? expandedCaptionId === currentPhoto.id : false;
+
   return (
-    <main dir={dir} className="mx-auto max-w-5xl p-4">
-      {/* Header: titre + secteurs + ville/location */}
-      <section className="rounded-2xl border p-5">
-        <div className="flex items-start gap-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {profile?.user_photo ? (
-            <img src={profile.user_photo} alt={title} className="h-14 w-14 rounded-full object-cover border" />
-          ) : null}
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold break-words">{title}</h1>
+    <main dir={dir} className="mx-auto max-w-5xl p-3 sm:p-4">
+      {/* Lightbox (UI only) */}
+      {lightbox ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setLightbox(null)}
+        >
+          <div
+            className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b p-3 sm:p-4">
+              <div className="text-sm font-medium text-gray-900">{t.openPhoto}</div>
+              <button
+                type="button"
+                className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50"
+                onClick={() => setLightbox(null)}
+              >
+                {t.close}
+              </button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={lightbox.url} alt={lightbox.caption ?? t.photoAlt} className="max-h-[70vh] w-full object-contain" />
+            {lightbox.caption ? (
+              <div className="border-t p-3 sm:p-4 text-sm text-gray-800 whitespace-pre-wrap">{lightbox.caption}</div>
+            ) : null}
           </div>
         </div>
+      ) : null}
 
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-700">
-          {(() => {
-            const labels = labelSectors(profile?.sectors ?? null);
-            if (!labels || labels.length === 0) return null;
-            return (
-              <span className="inline-flex flex-wrap items-center gap-2">
-                <span>•</span>
-                {labels.map((lbl, idx) => (
-                  <span key={idx} className="rounded-full border px-2 py-0.5 text-[12px]">
-                    {lbl}
+      {/* Header */}
+      <section className="rounded-2xl border p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+          {profile?.user_photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profile.user_photo}
+              alt={title}
+              className="h-14 w-14 rounded-full object-cover border self-start"
+            />
+          ) : null}
+
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl font-bold break-words sm:text-2xl">{title}</h1>
+
+            <div className="mt-2 space-y-2 text-sm text-gray-700">
+              {sectorLabels.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {sectorsToShow.map((lbl, idx) => (
+                    <span key={idx} className="rounded-full border bg-white px-2 py-0.5 text-[12px]">
+                      {lbl}
+                    </span>
+                  ))}
+
+                  {remainingSectors > 0 ? (
+                    <button
+                      type="button"
+                      className="rounded-full border bg-gray-50 px-2 py-0.5 text-[12px] hover:bg-gray-100"
+                      onClick={() => setShowAllSectors(true)}
+                    >
+                      +{remainingSectors} {t.showMore}
+                    </button>
+                  ) : null}
+
+                  {showAllSectors && sectorLabels.length > sectorMobileLimit ? (
+                    <button
+                      type="button"
+                      className="rounded-full border bg-gray-50 px-2 py-0.5 text-[12px] hover:bg-gray-100"
+                      onClick={() => setShowAllSectors(false)}
+                    >
+                      {t.showLess}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                {cityName ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span aria-hidden>📍</span>
+                    <span className="font-medium">{cityName}</span>
                   </span>
-                ))}
-              </span>
-            );
-          })()}
+                ) : null}
 
-          {cityName && <span>📍 {cityName}</span>}
-          {profile?.location && <span>• {profile.location}</span>}
+                {profile?.location ? (
+                  <span className="text-gray-600 sm:before:mx-2 sm:before:content-['•']">{profile.location}</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* ✅ PHOTOS: cover grande + galerie dessous avec caption */}
-      <section className="mt-6 rounded-2xl border p-5">
-        <h2 className="text-lg font-semibold">{t.photos}</h2>
+      {/* Photos (premium carousel, no cover UI) */}
+      <section className="mt-4 sm:mt-6 rounded-2xl border p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold sm:text-lg">{t.photos}</h2>
+          <div className="text-xs text-muted-foreground">{photos.length > 0 ? `${activeIndex + 1}/${photos.length}` : ""}</div>
+        </div>
 
         {photos.length === 0 ? (
           <p className="mt-2 text-sm text-gray-600">{t.noPhotos}</p>
         ) : (
-          <>
-            {/* Cover en grand */}
-            {coverPhoto ? (
-              <div className="mt-3 overflow-hidden rounded-2xl border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={coverPhoto.image_url}
-                  alt={coverPhoto.caption ?? t.photoAlt}
-                  className="h-64 w-full object-cover md:h-80"
-                />
-                <div className="p-3 flex items-start justify-between gap-3">
-                  <div className="text-sm text-gray-800 whitespace-pre-wrap">
-                    {coverPhoto.caption ? coverPhoto.caption : ""}
-                  </div>
-                  <span className="shrink-0 text-[11px] rounded-full bg-black text-white px-2 py-0.5">
-                    {t.cover}
-                  </span>
-                </div>
-              </div>
-            ) : null}
+          <div className="mt-4">
+            {/* Carousel viewport */}
+            <div className="relative overflow-hidden rounded-2xl border bg-white">
+              {/* Flèches */}
+              <button
+                type="button"
+                onClick={prevPhoto}
+                className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full border bg-white/90 px-3 py-2 text-sm shadow-sm hover:bg-white"
+                aria-label="Previous"
+              >
+                {dir === "rtl" ? "›" : "‹"}
+              </button>
 
-            {/* Autres photos juste dessous + description */}
-            {otherPhotos.length > 0 ? (
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-                {otherPhotos.map((p) => (
-                  <div key={p.id} className="overflow-hidden rounded-xl border">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.image_url} alt={p.caption ?? t.photoAlt} className="h-44 w-full object-cover" />
-                    <div className="p-2">
-                      <div className="text-xs text-gray-700 whitespace-pre-wrap">
-                        {p.caption ? p.caption : ""}
-                      </div>
-                    </div>
+              <button
+                type="button"
+                onClick={nextPhoto}
+                className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full border bg-white/90 px-3 py-2 text-sm shadow-sm hover:bg-white"
+                aria-label="Next"
+              >
+                {dir === "rtl" ? "‹" : "›"}
+              </button>
+
+              {/* Scroller */}
+              <div
+                ref={scrollerRef}
+                onScroll={onScrollCarousel}
+                className="flex w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
+                style={{ scrollbarWidth: "none" as any }}
+              >
+                {photos.map((p) => (
+                  <div key={p.id} className="w-full flex-shrink-0 snap-start">
+                    <button
+                      type="button"
+                      className="block w-full"
+                      onClick={() => setLightbox({ url: p.image_url, caption: p.caption })}
+                      aria-label={t.openPhoto}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.image_url}
+                        alt={p.caption ?? t.photoAlt}
+                        className="h-56 w-full object-cover sm:h-72"
+                      />
+                    </button>
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Dots */}
+            <div className="mt-3 flex items-center justify-center gap-2">
+              {photos.map((p, idx) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={[
+                    "h-2.5 w-2.5 rounded-full border",
+                    idx === activeIndex ? "bg-gray-900 border-gray-900" : "bg-white border-gray-300",
+                  ].join(" ")}
+                  onClick={() => scrollToIndex(idx)}
+                  aria-label={`Go to photo ${idx + 1}`}
+                />
+              ))}
+            </div>
+
+            {/* Caption du slide courant (premium, propre) */}
+            {currentHasCaption ? (
+              <div className="mt-4 rounded-2xl border bg-white p-3 sm:p-4">
+                <div
+                  className={[
+                    "text-sm text-gray-800 whitespace-pre-wrap leading-relaxed",
+                    captionExpanded ? "" : "line-clamp-3",
+                  ].join(" ")}
+                >
+                  {currentPhoto?.caption}
+                </div>
+
+                <button
+                  type="button"
+                  className="mt-2 text-xs underline text-gray-700"
+                  onClick={() => {
+                    if (!currentPhoto) return;
+                    setExpandedCaptionId(captionExpanded ? null : currentPhoto.id);
+                  }}
+                >
+                  {captionExpanded ? t.readLess : t.readMore}
+                </button>
+              </div>
             ) : null}
-          </>
+          </div>
         )}
       </section>
 
-      {/* ✅ Description déplacée sous les photos */}
+      {/* Description */}
       {profile?.description ? (
-        <section className="mt-6 rounded-2xl border p-5">
-          <h2 className="text-lg font-semibold">{t.description}</h2>
-          <p className="mt-2 whitespace-pre-wrap text-gray-800">{profile.description}</p>
+        <section className="mt-4 sm:mt-6 rounded-2xl border p-4 sm:p-5">
+          <h2 className="text-base font-semibold sm:text-lg">{t.description}</h2>
+
+          <div className="mt-2">
+            <p
+              className={[
+                "whitespace-pre-wrap text-gray-800 leading-relaxed",
+                shouldClampDesc && !descExpanded ? "line-clamp-6" : "",
+              ].join(" ")}
+            >
+              {profile.description}
+            </p>
+
+            {shouldClampDesc ? (
+              <button
+                type="button"
+                className="mt-2 text-sm underline text-gray-700"
+                onClick={() => setDescExpanded((v) => !v)}
+              >
+                {descExpanded ? t.readLess : t.readMore}
+              </button>
+            ) : null}
+          </div>
         </section>
       ) : null}
 
-      {/* ✅ Contact ajouté (sans toucher au backend) */}
+      {/* Contact */}
       {hasContact ? (
-        <section className="mt-6 rounded-2xl border p-5">
-          <h2 className="text-lg font-semibold">{t.contact}</h2>
+        <section className="mt-4 sm:mt-6 rounded-2xl border p-4 sm:p-5">
+          <h2 className="text-base font-semibold sm:text-lg">{t.contact}</h2>
 
-          <div className="mt-3 space-y-2 text-sm text-gray-800">
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
             {profile?.phone?.trim() ? (
-              <div>
+              <a
+                className="inline-flex items-center justify-center rounded-xl border bg-white px-4 py-3 text-sm font-medium hover:bg-gray-50"
+                href={`tel:${profile.phone}`}
+              >
+                {t.call}
+              </a>
+            ) : null}
+
+            {profile?.email?.trim() ? (
+              <a
+                className="inline-flex items-center justify-center rounded-xl border bg-white px-4 py-3 text-sm font-medium hover:bg-gray-50"
+                href={`mailto:${profile.email}`}
+              >
+                {t.sendEmail}
+              </a>
+            ) : null}
+
+            {profile?.website?.trim() ? (
+              <a
+                className="inline-flex items-center justify-center rounded-xl border bg-white px-4 py-3 text-sm font-medium hover:bg-gray-50"
+                href={normalizeWebsite(profile.website)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t.visitSite}
+              </a>
+            ) : null}
+          </div>
+
+          <div className="mt-4 space-y-2 text-sm text-gray-800">
+            {profile?.phone?.trim() ? (
+              <div className="break-words">
                 <span className="font-medium">{t.phone}: </span>
                 <a className="underline" href={`tel:${profile.phone}`}>
                   {profile.phone}
@@ -384,7 +612,7 @@ export default function CompanyPublicPage() {
             ) : null}
 
             {profile?.email?.trim() ? (
-              <div>
+              <div className="break-words">
                 <span className="font-medium">{t.email}: </span>
                 <a className="underline" href={`mailto:${profile.email}`}>
                   {profile.email}
@@ -393,7 +621,7 @@ export default function CompanyPublicPage() {
             ) : null}
 
             {profile?.website?.trim() ? (
-              <div>
+              <div className="break-words">
                 <span className="font-medium">{t.website}: </span>
                 <a className="underline" href={normalizeWebsite(profile.website)} target="_blank" rel="noreferrer">
                   {profile.website}
@@ -404,7 +632,7 @@ export default function CompanyPublicPage() {
         </section>
       ) : null}
 
-      {/* Reviews inchangés */}
+      {/* Reviews (business logic untouched) */}
       <ReviewsSection
         targetType="company"
         targetProfileId={companyId}

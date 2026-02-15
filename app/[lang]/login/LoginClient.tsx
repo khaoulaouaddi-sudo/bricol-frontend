@@ -39,9 +39,17 @@ const i18n = {
     forgot: "Mot de passe oublié ?",
     invalidServer: "Réponse serveur invalide (access_token manquant).",
     googleError: "Erreur lors de la connexion avec Google.",
+    facebook: "Continuer avec Facebook",
+    facebookError: "Erreur lors de la connexion avec Facebook.",
+    facebookNeedEmail:
+      "Facebook n’a pas fourni votre email. Merci de le saisir pour continuer.",
+    continue: "Continuer",
     invalidCreds: "Email ou mot de passe invalide.",
     loginError: "Erreur lors de la connexion.",
-    verifyHint: "Vérifie ta boîte email (et spams). Puis reviens te connecter.",
+    verifyHint:
+      "Vérifie ta boîte email (et spams). Puis reviens te connecter.",
+    missingFbAppId:
+      "Configuration manquante: NEXT_PUBLIC_FACEBOOK_APP_ID n'est pas défini.",
   },
   ar: {
     title: "تسجيل الدخول",
@@ -56,9 +64,17 @@ const i18n = {
     forgot: "نسيت كلمة المرور؟",
     invalidServer: "ردّ غير صالح من الخادم (access_token غير موجود).",
     googleError: "حدث خطأ أثناء تسجيل الدخول عبر Google.",
+    facebook: "المتابعة عبر فيسبوك",
+    facebookError: "حدث خطأ أثناء تسجيل الدخول عبر فيسبوك.",
+    facebookNeedEmail:
+      "فيسبوك لم يوفّر بريدك الإلكتروني. يرجى إدخاله للمتابعة.",
+    continue: "متابعة",
     invalidCreds: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
     loginError: "حدث خطأ أثناء تسجيل الدخول.",
-    verifyHint: "تحقّق من بريدك الإلكتروني (وأيضًا الرسائل غير المرغوب فيها). ثم حاول تسجيل الدخول من جديد.",
+    verifyHint:
+      "تحقّق من بريدك الإلكتروني (وأيضًا الرسائل غير المرغوب فيها). ثم حاول تسجيل الدخول من جديد.",
+    missingFbAppId:
+      "إعدادات ناقصة: NEXT_PUBLIC_FACEBOOK_APP_ID غير مُعرّف.",
   },
 } as const;
 
@@ -79,11 +95,18 @@ export default function LoginClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const rendered = useRef(false);
+  // Facebook fallback si pas d'email
+  const [fbNeedEmail, setFbNeedEmail] = useState(false);
+  const [fbEmail, setFbEmail] = useState("");
+  const [fbAccessToken, setFbAccessToken] = useState<string | null>(null);
 
+  const googleRendered = useRef(false);
+  const fbRendered = useRef(false);
+
+  // ===== Google SDK (inchangé, juste renommage ref) =====
   useEffect(() => {
-    if (rendered.current) return;
-    rendered.current = true;
+    if (googleRendered.current) return;
+    googleRendered.current = true;
 
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
@@ -122,6 +145,65 @@ export default function LoginClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ===== Facebook SDK =====
+  useEffect(() => {
+    if (fbRendered.current) return;
+    fbRendered.current = true;
+
+    const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+    if (!appId) {
+      // On ne bloque pas toute la page, mais on avertit si l'utilisateur clique.
+      return;
+    }
+
+    // si déjà chargé
+    // @ts-ignore
+    if (window.FB) {
+      // @ts-ignore
+      window.FB.init({
+        appId,
+        cookie: true,
+        xfbml: false,
+        version: "v20.0",
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://connect.facebook.net/en_US/sdk.js";
+    script.async = true;
+    script.defer = true;
+
+    script.onload = () => {
+      // @ts-ignore
+      if (!window.FB) return;
+      // @ts-ignore
+      window.FB.init({
+        appId,
+        cookie: true,
+        xfbml: false,
+        version: "v20.0",
+      });
+    };
+
+    document.body.appendChild(script);
+
+    return () => {
+      try {
+        document.body.removeChild(script);
+      } catch {}
+    };
+  }, []);
+
+  const redirectAfterAuth = (accessToken: string) => {
+    const role = getRoleFromJwt(accessToken);
+    if (role === "admin" && (next === "/" || !next)) {
+      router.push(`${base}/admin`);
+    } else {
+      router.push(next);
+    }
+  };
+
   const handleGoogleCredential = async (response: any) => {
     try {
       setLoading(true);
@@ -137,14 +219,7 @@ export default function LoginClient() {
       }
 
       await login(accessToken);
-
-      const role = getRoleFromJwt(accessToken);
-
-      if (role === "admin" && (next === "/" || !next)) {
-        router.push(`${base}/admin`);
-      } else {
-        router.push(next);
-      }
+      redirectAfterAuth(accessToken);
     } catch (err: any) {
       console.error(err);
       const msg = err?.response?.data?.msg;
@@ -169,14 +244,7 @@ export default function LoginClient() {
       }
 
       await login(accessToken);
-
-      const role = getRoleFromJwt(accessToken);
-
-      if (role === "admin" && (next === "/" || !next)) {
-        router.push(`${base}/admin`);
-      } else {
-        router.push(next);
-      }
+      redirectAfterAuth(accessToken);
     } catch (err: any) {
       console.error(err);
 
@@ -197,6 +265,88 @@ export default function LoginClient() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ===== Facebook handlers =====
+  const exchangeFacebookToken = async (token: string, emailOverride?: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const payload: any = { access_token: token };
+      if (emailOverride) payload.email = emailOverride;
+
+      const res = await api.post("/oauth/facebook", payload);
+
+      const accessToken = res?.data?.access_token;
+      if (!accessToken) {
+        setError(t.invalidServer);
+        return;
+      }
+
+      await login(accessToken);
+      redirectAfterAuth(accessToken);
+    } catch (err: any) {
+      console.error(err);
+      const msg = err?.response?.data?.msg || t.facebookError;
+
+      // Backend exact:
+      // "Facebook n'a pas fourni d'email; passez 'email' dans le body."
+      if (
+        typeof msg === "string" &&
+        msg.includes("Facebook n'a pas fourni d'email")
+      ) {
+        setFbNeedEmail(true);
+        setError(t.facebookNeedEmail);
+        return;
+      }
+
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onFacebookClick = () => {
+    setError(null);
+    setFbNeedEmail(false);
+    setFbEmail("");
+    setFbAccessToken(null);
+
+    const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+    if (!appId) {
+      setError(t.missingFbAppId);
+      return;
+    }
+
+    // @ts-ignore
+    if (!window.FB) {
+      setError(t.facebookError);
+      return;
+    }
+
+    // @ts-ignore
+    window.FB.login(
+      (resp: any) => {
+        const token = resp?.authResponse?.accessToken;
+        if (!token) {
+          setError(t.facebookError);
+          return;
+        }
+        setFbAccessToken(token);
+        void exchangeFacebookToken(token);
+      },
+      { scope: "public_profile,email" }
+    );
+  };
+
+  const onFacebookEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fbAccessToken) {
+      setError(t.facebookError);
+      return;
+    }
+    void exchangeFacebookToken(fbAccessToken, fbEmail);
   };
 
   return (
@@ -254,7 +404,38 @@ export default function LoginClient() {
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        <div id="googleSignInDiv" className="flex justify-center" />
+        <div className="space-y-3">
+          <div id="googleSignInDiv" className="flex justify-center" />
+
+          <button
+            type="button"
+            onClick={onFacebookClick}
+            disabled={loading}
+            className="w-full border rounded-lg py-2 hover:bg-gray-50 transition disabled:opacity-60"
+          >
+            {t.facebook}
+          </button>
+
+          {fbNeedEmail && (
+            <form onSubmit={onFacebookEmailSubmit} className="space-y-2">
+              <input
+                type="email"
+                required
+                value={fbEmail}
+                onChange={(e) => setFbEmail(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-black"
+                placeholder={t.emailPh}
+              />
+              <button
+                type="submit"
+                disabled={loading || !fbEmail}
+                className="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-800 transition disabled:opacity-60"
+              >
+                {t.continue}
+              </button>
+            </form>
+          )}
+        </div>
 
         <div className="text-sm text-center text-gray-600 space-y-1 mt-4">
           <p>

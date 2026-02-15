@@ -408,10 +408,6 @@ function WorkerNewInner() {
     input.click();
   }
 
-  function setCover(id: string) {
-    setPhotos((prev) => prev.map((p) => ({ ...p, is_cover: p.id === id })));
-  }
-
   function updateCaption(id: string, caption: string) {
     setPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, caption } : p)));
   }
@@ -675,15 +671,6 @@ function WorkerNewInner() {
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        name="worker-cover"
-                        checked={p.is_cover}
-                        onChange={() => setCover(p.id)}
-                      />
-                      {t.cover}
-                    </label>
 
                     <button
                       type="button"

@@ -40,9 +40,8 @@ const i18n = {
       n === 0 ? "Aucun secteur sélectionné" : `${n} secteur(s) sélectionné(s)`,
 
     photosTitle: "Photos entreprise",
-    photosSubtitle:
-      "Choisis une photo de couverture : elle s’affiche sur la carte (accueil, recherche, etc.).",
-    cover: "Couverture",
+    // ✅ plus de mention cover
+    photosSubtitle: "Ajoute des photos et une description pour chacune (Cloudinary uniquement).",
 
     publicView: "Voir public",
   },
@@ -73,8 +72,8 @@ const i18n = {
     sectorsSelected: (n: number) => (n === 0 ? "لم يتم اختيار أي قطاع" : `تم اختيار ${n}`),
 
     photosTitle: "صور الشركة",
-    photosSubtitle: "اختر صورة الغلاف لأنها تظهر في البطاقات (الرئيسية/البحث...).",
-    cover: "الغلاف",
+    // ✅ plus de mention cover
+    photosSubtitle: "أضِف صوراً مع وصف لكل صورة (رفع Cloudinary فقط).",
 
     publicView: "عرض عام",
   },
@@ -103,7 +102,7 @@ type CompanyPhoto = {
   id: number;
   image_url: string;
   caption: string | null;
-  is_cover: boolean;
+  is_cover: boolean; // compat backend/data existante
 };
 
 type CompanyDetail = {
@@ -145,12 +144,6 @@ function umbrellaLabel(u: Umbrella) {
 }
 function sectorLabel(s: Umbrella["sectors"][number]) {
   return s.display_label ?? s.label ?? `#${s.id}`;
-}
-
-function pickCoverUrl(photos: CompanyPhoto[] | null | undefined) {
-  if (!photos || photos.length === 0) return null;
-  const cover = photos.find((p) => p.is_cover) ?? photos[0];
-  return cover?.image_url ?? null;
 }
 
 /** Dropdown compact multi-select (checkboxes) */
@@ -199,7 +192,11 @@ function SectorDropdown(props: {
       >
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm">
-            {value.length === 0 ? <span className="opacity-70">{placeholder}</span> : <span>{selectedText(value.length)}</span>}
+            {value.length === 0 ? (
+              <span className="opacity-70">{placeholder}</span>
+            ) : (
+              <span>{selectedText(value.length)}</span>
+            )}
           </div>
           <div className="text-xs opacity-60">{open ? "▲" : "▼"}</div>
         </div>
@@ -216,7 +213,8 @@ function SectorDropdown(props: {
             />
           </div>
 
-          <div className="max-h-[320px] overflow-auto p-2">
+          {/* ✅ Mobile: hauteur plus adaptée */}
+          <div className="max-h-[60vh] sm:max-h-[320px] overflow-auto p-2">
             {filtered.length === 0 ? (
               <div className="p-3 text-sm opacity-70">—</div>
             ) : (
@@ -329,7 +327,9 @@ function CompanyEditClient() {
 
         const [citiesRes, umbrellasRes, companyRes] = await Promise.all([
           api.get("/cities").then((r) => (Array.isArray(r.data) ? (r.data as City[]) : [])),
-          api.get("/umbrellas", { params: { type: "company" } }).then((r) => (Array.isArray(r.data) ? (r.data as unknown[]) : [])),
+          api
+            .get("/umbrellas", { params: { type: "company" } })
+            .then((r) => (Array.isArray(r.data) ? (r.data as unknown[]) : [])),
           api.get(`/company-profiles/${companyId}`, { params: { lang } }).then((r) => r.data as CompanyDetail),
         ]);
 
@@ -393,7 +393,6 @@ function CompanyEditClient() {
       setBusy(true);
       setMsg(null);
 
-      // 1) update company profile
       await api.put(`/company-profiles/${companyId}`, {
         name: name.trim() || null,
         city_id: cityId,
@@ -404,7 +403,6 @@ function CompanyEditClient() {
         description: desc.trim() || null,
       });
 
-      // 2) sync sectors (diff)
       const current = await api
         .get(`/company-profiles/${companyId}/sectors`)
         .then((r) => (Array.isArray(r.data) ? (r.data as CompanySectorRow[]) : []));
@@ -424,7 +422,6 @@ function CompanyEditClient() {
         await api.delete(`/company-profiles/${companyId}/sectors/${sid}`);
       }
 
-      // reload fresh detail (optional but safe)
       const fresh = await api.get(`/company-profiles/${companyId}`, { params: { lang } }).then((r) => r.data as CompanyDetail);
       setDetail(fresh);
       setPhotos(Array.isArray(fresh.photos) ? fresh.photos : []);
@@ -439,13 +436,14 @@ function CompanyEditClient() {
     }
   }
 
-  async function photoCreate(item: { url: string; caption: string; is_cover: boolean }) {
+  async function photoCreate(item: { url: string; caption: string; is_cover?: boolean }) {
     if (!companyId || Number.isNaN(companyId)) return;
 
     await api.post("/company-photos", {
       company_id: companyId,
       image_url: item.url,
       caption: item.caption || null,
+      // ✅ Option A : on garde la compat backend, mais aucun UI "cover" sur la page
       is_cover: item.is_cover,
     });
     await reloadPhotos(companyId);
@@ -457,12 +455,6 @@ function CompanyEditClient() {
     await reloadPhotos(companyId);
   }
 
-  async function photoSetCover(photoId: number) {
-    if (!companyId || Number.isNaN(companyId)) return;
-    await api.patch(`/company-photos/${photoId}`, { is_cover: true });
-    await reloadPhotos(companyId);
-  }
-
   async function photoUpdateCaption(photoId: number, caption: string) {
     if (!companyId || Number.isNaN(companyId)) return;
     await api.patch(`/company-photos/${photoId}`, { caption });
@@ -471,7 +463,7 @@ function CompanyEditClient() {
 
   if (loading) {
     return (
-      <main dir={dir} className="max-w-6xl mx-auto p-6">
+      <main dir={dir} className="max-w-6xl mx-auto p-3 sm:p-6">
         <div className="border rounded-xl p-4">{t.loading}</div>
       </main>
     );
@@ -479,14 +471,22 @@ function CompanyEditClient() {
 
   if (error) {
     return (
-      <main dir={dir} className="max-w-6xl mx-auto p-6 space-y-3">
+      <main dir={dir} className="max-w-6xl mx-auto p-3 sm:p-6 space-y-3">
         <div className="border rounded-xl p-4 text-red-600">{error}</div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={() => router.push(`${base}/account?tab=company`)}>
+
+        {/* ✅ Mobile: boutons full width, Desktop: inline */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-2 sm:flex-wrap">
+          <Button
+            className="w-full sm:w-auto"
+            variant="outline"
+            onClick={() => router.push(`${base}/account?tab=company`)}
+          >
             {t.back}
           </Button>
-          <Link href={base}>
-            <Button variant="outline">{t.back}</Button>
+          <Link className="w-full sm:w-auto" href={base}>
+            <Button className="w-full sm:w-auto" variant="outline">
+              {t.back}
+            </Button>
           </Link>
         </div>
       </main>
@@ -494,50 +494,57 @@ function CompanyEditClient() {
   }
 
   const publicTitle = (detail?.name ?? detail?.title ?? "").trim() || `#${companyId}`;
-  const cover = pickCoverUrl(photos);
 
+  // ✅ on garde is_cover en data, mais on ne l’utilise pas dans l’UI
   const photoItems: PhotoItem[] = photos.map((p) => ({
     id: p.id,
     url: p.image_url,
     caption: p.caption ?? "",
+    // On peut le laisser (PhotoUrlPicker l’ignore côté UI). Ça ne change rien.
     is_cover: !!p.is_cover,
   }));
 
   return (
-    <main dir={dir} className="max-w-6xl mx-auto p-6 space-y-6">
-      <header className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold">{t.title}</h1>
+    <main dir={dir} className="max-w-6xl mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
+      {/* ✅ Header mobile propre (stack), desktop identique */}
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="space-y-1 min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold break-words">{t.title}</h1>
           <div className="text-sm opacity-70">{t.subtitle}</div>
         </div>
 
-        <div className="flex gap-2 flex-wrap">
-          <Link href={`${base}/company/${companyId}`}>
-            <Button variant="outline">{t.publicView}</Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-2 sm:flex-wrap">
+          <Link className="w-full sm:w-auto" href={`${base}/company/${companyId}`}>
+            <Button className="w-full sm:w-auto" variant="outline">
+              {t.publicView}
+            </Button>
           </Link>
-          <Button variant="outline" onClick={() => router.push(`${base}/account?tab=company`)}>
+          <Button
+            className="w-full sm:w-auto"
+            variant="outline"
+            onClick={() => router.push(`${base}/account?tab=company`)}
+          >
             {t.back}
           </Button>
         </div>
       </header>
 
+      {/* ✅ Form card (sans cover UI) */}
       <section className="rounded-2xl border bg-white overflow-hidden">
-        {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt={publicTitle} className="w-full h-56 object-cover" />
-        ) : (
-          <div className="w-full h-56 bg-gray-100 flex items-center justify-center text-sm text-gray-500">—</div>
-        )}
-
-        <div className="p-5 space-y-4">
-          <div className="grid md:grid-cols-2 gap-3">
+        <div className="p-4 sm:p-5 space-y-4">
+          {/* ✅ Form: spacing mobile amélioré */}
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-3">
             <div className="space-y-1">
-              <div className="text-sm opacity-70">{t.name}</div>
-              <input className="w-full rounded-xl border px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} />
+              <div className="text-sm font-medium text-gray-700">{t.name}</div>
+              <input
+                className="w-full rounded-xl border px-3 py-2"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm opacity-70">{t.city}</div>
+              <div className="text-sm font-medium text-gray-700">{t.city}</div>
               <select
                 className="w-full rounded-xl border px-3 py-2"
                 value={cityId ?? ""}
@@ -553,27 +560,43 @@ function CompanyEditClient() {
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm opacity-70">{t.location}</div>
-              <input className="w-full rounded-xl border px-3 py-2" value={location} onChange={(e) => setLocation(e.target.value)} />
+              <div className="text-sm font-medium text-gray-700">{t.location}</div>
+              <input
+                className="w-full rounded-xl border px-3 py-2"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm opacity-70">{t.phone}</div>
-              <input className="w-full rounded-xl border px-3 py-2" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <div className="text-sm font-medium text-gray-700">{t.phone}</div>
+              <input
+                className="w-full rounded-xl border px-3 py-2"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm opacity-70">{t.email}</div>
-              <input className="w-full rounded-xl border px-3 py-2" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <div className="text-sm font-medium text-gray-700">{t.email}</div>
+              <input
+                className="w-full rounded-xl border px-3 py-2"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
 
             <div className="space-y-1">
-              <div className="text-sm opacity-70">{t.website}</div>
-              <input className="w-full rounded-xl border px-3 py-2" value={website} onChange={(e) => setWebsite(e.target.value)} />
+              <div className="text-sm font-medium text-gray-700">{t.website}</div>
+              <input
+                className="w-full rounded-xl border px-3 py-2"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
             </div>
 
             <div className="space-y-1 md:col-span-2">
-              <div className="text-sm opacity-70">{t.desc}</div>
+              <div className="text-sm font-medium text-gray-700">{t.desc}</div>
               <textarea
                 className="w-full rounded-xl border px-3 py-2 min-h-[120px]"
                 value={desc}
@@ -584,7 +607,7 @@ function CompanyEditClient() {
 
           {/* sectors */}
           <div className="space-y-2">
-            <div className="text-sm opacity-70">{t.sectors}</div>
+            <div className="text-sm font-medium text-gray-700">{t.sectors}</div>
             <SectorDropdown
               disabled={false}
               umbrellas={umbrellas}
@@ -596,23 +619,29 @@ function CompanyEditClient() {
             />
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button onClick={save} disabled={busy}>
+          {/* ✅ Actions mobile: bouton plein largeur */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+            <Button className="w-full sm:w-auto" onClick={save} disabled={busy}>
               {busy ? t.saving : t.save}
             </Button>
             {msg ? <div className="text-sm opacity-80">{msg}</div> : null}
           </div>
+
+          {/* (publicTitle conservé, non affiché : pas de changement métier) */}
+       
         </div>
       </section>
 
       {/* photos */}
-      <section className="rounded-2xl border bg-white p-5 space-y-2">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <div className="text-lg font-semibold">{t.photosTitle}</div>
+      <section className="rounded-2xl border bg-white p-4 sm:p-5 space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+          <div className="min-w-0">
+            <div className="text-base sm:text-lg font-semibold">{t.photosTitle}</div>
             <div className="text-sm opacity-70">{t.photosSubtitle}</div>
           </div>
-          <div className="text-sm opacity-70">
+
+          {/* ✅ compteur en badge compact */}
+          <div className="self-start rounded-full border bg-white px-3 py-1 text-sm opacity-80">
             {photos.length}/{MAX_COMPANY_PHOTOS}
           </div>
         </div>
@@ -629,9 +658,6 @@ function CompanyEditClient() {
             },
             onDelete: async (photoId) => {
               await photoDelete(photoId);
-            },
-            onSetCover: async (photoId) => {
-              await photoSetCover(photoId);
             },
             onUpdateCaption: async (photoId, caption) => {
               await photoUpdateCaption(photoId, caption);

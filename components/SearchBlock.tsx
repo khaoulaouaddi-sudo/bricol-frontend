@@ -58,11 +58,11 @@ export function SearchBlock() {
   }
 
   return (
-    <div className="w-full rounded-2xl bg-white/80 p-4 shadow" dir={lang === "ar" ? "rtl" : "ltr"}>
+    <div className="w-full rounded-2xl bg-white/80 p-3 sm:p-4 shadow" dir={lang === "ar" ? "rtl" : "ltr"}>
       <div className="flex flex-col md:flex-row gap-3">
         {/* Ville */}
         <select
-          className="flex-1 rounded-xl border p-3"
+          className="flex-1 rounded-xl border p-2 sm:p-3"
           value={city}
           onChange={(e) => setCity(e.target.value)}
         >
@@ -76,7 +76,7 @@ export function SearchBlock() {
 
         {/* Secteur (groupé par umbrella) */}
         <select
-          className="flex-1 rounded-xl border p-3"
+          className="flex-1 rounded-xl border p-2 sm:p-3"
           value={sector}
           onChange={(e) => setSector(e.target.value)}
         >
@@ -96,7 +96,7 @@ export function SearchBlock() {
         {/* Bouton */}
         <button
           onClick={submit}
-          className="rounded-xl px-5 py-3 bg-black text-white hover:bg-gray-800"
+          className="w-full md:w-auto rounded-xl px-4 sm:px-5 py-2.5 sm:py-3 bg-black text-white hover:bg-gray-800"
         >
           {t.search}
         </button>

@@ -349,7 +349,7 @@ function WorkerEditInner() {
     }));
   }
 
-  async function photoCreate(pid: number, item: { url: string; caption: string; is_cover: boolean }) {
+  async function photoCreate(pid: number, item: { url: string; caption: string; is_cover?: boolean }) {
     // Limite backend : middleware lit req.body.profile_id => on l’envoie pour être sûr
     await api.post(`/worker-profiles/${pid}/photos`, {
       profile_id: pid,
@@ -367,11 +367,6 @@ function WorkerEditInner() {
 
   async function photoDelete(pid: number, photoId: number) {
     await api.delete(`/worker-photos/${photoId}`);
-    await refreshPhotos(pid);
-  }
-
-  async function photoSetCover(pid: number, photoId: number) {
-    await api.patch(`/worker-photos/${photoId}`, { is_cover: true });
     await refreshPhotos(pid);
   }
 
@@ -532,10 +527,7 @@ function WorkerEditInner() {
                 setError(null);
                 await photoDelete(workerId, photoId);
               },
-              onSetCover: async (photoId) => {
-                setError(null);
-                await photoSetCover(workerId, photoId);
-              },
+
               onUpdateCaption: async (photoId, caption) => {
                 setError(null);
                 await photoUpdateCaption(workerId, photoId, caption);

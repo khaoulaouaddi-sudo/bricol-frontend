@@ -226,7 +226,7 @@ export default function ReviewsSection(props: {
 
   if (loading) {
     return (
-      <section className="mt-8 rounded-xl border p-4">
+      <section className="mt-6 sm:mt-8 rounded-xl border bg-white p-3 sm:p-4">
         <div className="font-semibold">{t.title}</div>
         <div className="mt-2 text-sm text-gray-600">{t.loading}</div>
       </section>
@@ -234,7 +234,7 @@ export default function ReviewsSection(props: {
   }
 
   return (
-    <section className="mt-8 rounded-xl border p-4">
+    <section className="mt-6 sm:mt-8 rounded-xl border bg-white p-3 sm:p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">{t.title}</h2>

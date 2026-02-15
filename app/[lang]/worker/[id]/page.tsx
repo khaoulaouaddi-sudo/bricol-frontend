@@ -225,7 +225,6 @@ export default function WorkerPublicPage() {
   }, [workerId, lang, t.invalidId, t.loadErr, t.workerFallback, LS_KEY]);
 
   const sortedPhotos = useMemo(() => sortPhotosCoverFirst(photos), [photos]);
-  const cover = useMemo(() => pickCover(sortedPhotos), [sortedPhotos]);
 
   if (loading) {
     return (
@@ -335,15 +334,6 @@ export default function WorkerPublicPage() {
       </section>
 
       <section className="rounded-2xl border bg-white overflow-hidden">
-        {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={cover} alt={displayName} className="w-full h-72 object-cover" />
-        ) : (
-          <div className="w-full h-72 bg-gray-100 flex items-center justify-center text-sm text-gray-500">
-            {t.noPhoto}
-          </div>
-        )}
-
         <div className="p-5 space-y-2">
           {profile.title ? <div className="text-sm text-gray-700">{profile.title}</div> : null}
           {profile.description ? (
@@ -367,16 +357,7 @@ export default function WorkerPublicPage() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={p.image_url} alt={displayName} className="w-full h-44 object-cover" />
 
-                <div className="p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    {p.is_cover ? (
-                      <span className="text-xs px-2 py-1 rounded-full border bg-gray-50">Cover</span>
-                    ) : (
-                      <span />
-                    )}
-                  </div>
-
-                  {p.caption ? (
+                <div className="p-3 space-y-2">                  {p.caption ? (
                     <div className="space-y-1">
                       <div className="text-xs opacity-70">{t.photoCaption}</div>
                       <div className="text-sm text-gray-700 whitespace-pre-line">{p.caption}</div>
