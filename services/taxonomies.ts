@@ -4,7 +4,7 @@ import { City, Umbrella, Sector } from "@/types";
 
 export async function fetchCities(lang?: "fr" | "ar"): Promise<City[]> {
   const { data } = await api.get<City[]>("/cities", {
-    params: lang ? { lang } : undefined,
+    params: { ...(lang ? { lang } : {}), limit: 100 }, // <-- IMPORTANT
   });
   return data;
 }
