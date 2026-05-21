@@ -4,6 +4,7 @@ import Image from "next/image";
 import { SearchBlock } from "@/components/SearchBlock";
 import SelectedProfilesSection from "@/components/home/SelectedProfilesSection";
 import UmbrellaIconsClient from "@/components/home/UmbrellaIconsClient";
+import QuikWorkerRegister from "@/components/home/QuikWorkerRegister";
 
 export default function HomePage({
   params,
@@ -24,7 +25,7 @@ export default function HomePage({
           style={{ maxHeight: "220px" }}
         />
       </section>
-
+       <QuikWorkerRegister lang={lang} />
       <SearchBlock />
 
       <section className="space-y-3">
